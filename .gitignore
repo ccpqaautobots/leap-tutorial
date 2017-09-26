@@ -1,0 +1,27 @@
+# app data
+app/data/
+
+# app logs
+app/logs/*
+!app/logs/.gitkeep
+
+# node modules folder
+node_modules/
+
+# vscode settings
+.vscode/
+
+# sonar properties
+sonar-project.properties
+
+# sonar folder
+.sonar/
+
+# debug
+debug.log
+
+# app uploads folder
+app/public/uploads/
+
+# npm debug
+npm-debug.log

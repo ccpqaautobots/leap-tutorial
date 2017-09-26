@@ -1,0 +1,85 @@
+<script>
+    jQuery.validator.addMethod("notEqual", function (value, element, param) {
+        return $(param).val() != value;
+    }, "Please specify a different (non-default) value");
+
+    function UserSettingsViewModel() {
+        var root = this;
+
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, 'Account Management');
+            }, 500);
+        }
+
+        ko.bindingHandlers.changePassForm = {
+            init: function (element, valueAccessor) {
+                root.changePassReset = function () {
+                    $(element).trigger('reset');
+                };
+                root.changePassButtonHtml = ko.observable('Save');
+                $(element).submit(function (e) {
+                    e.preventDefault();
+                    if ($(element).valid()) {
+                        root.changePassButtonHtml('<i class="fa fa-spinner fa-pulse"></i>');
+                        $.ajax({
+                            type: "PUT",
+                            url: `/api/user/<%= user.username %>/change_password`,
+                            data: JSON.stringify({ pass: $('#newpassword').val(), oldpass: $('#oldpassword').val() }),
+                            contentType: 'application/json; charset=utf8',
+                            dataType: 'json',
+                            success: function (result) {
+                                if (result.success) {
+                                    toastrTrigger(result.message, 'Account Management');
+                                    $(element).trigger('reset');
+                                    root.changePassButtonHtml('Save');
+                                } else {
+                                    toastrTrigger(result.message, 'Account Management', 'error');
+                                    root.changePassButtonHtml('Save');
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        };
+        ko.bindingHandlers.changePassValidation = {
+            init: function (element, valueAccessor) {
+                $(element).validate({
+                    errorClass: 'error jquery-invalid',
+                    rules: {
+                        oldpassword: {
+                            required: true
+                        },
+                        newpassword: {
+                            required: true,
+                            minlength: 8,
+                            maxlength: 15,
+                            notEqual: "#oldpassword"
+                        },
+                        confirmpassword: {
+                            required: true,
+                            equalTo: '#newpassword'
+                        }
+                    },
+                    messages: {
+                        newpassword: {
+                            notEqual: 'Please provide a new password.'
+                        },
+                        confirmpassword: {
+                            equalTo: 'Password does not match.'
+                        }
+                    }
+                });
+            }
+        };
+    };
+
+    ko.applyBindings(new UserSettingsViewModel(), document.getElementById('wrapper-content'));
+</script>

@@ -1,0 +1,588 @@
+<!-- Select2 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
+<script type="text/javascript">
+    var _token = '<%= user.token %>';
+    Array.prototype.contains = function (v) {
+        for (var i = 0; i < this.length; i++) {
+            if (this[i] === v) return true;
+        }
+        return false;
+    };
+
+    Array.prototype.unique = function () {
+        var arr = [];
+        for (var i = 0; i < this.length; i++) {
+            if (!arr.contains(this[i])) {
+                arr.push(this[i]);
+            }
+        }
+        return arr;
+    }
+
+    function ScenarioRepositoryViewModel() {
+        var root = this;
+
+        root.project = '<%= project.projectKey %>';
+        var _author = <%- JSON.stringify(user.fullname) %>;
+        root.statuses = ko.observableArray(["-", "In-progress", "Maintenance", "Completed"]);
+
+        // #########################################
+        // MODELS - FOR EASY DATA MANIPULATION
+        // #########################################
+
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, title || 'Scenario Repository');
+            }, 500);
+        }
+
+        root.formatDate = function (knockoutDate) {
+            if (knockoutDate() === undefined)
+                return null;
+
+            var date = new Date(knockoutDate());
+            var ampm = (date.getHours() >= 12) ? 'PM' : 'AM';
+            var hours = (date.getHours());
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${hours}:${date.getMinutes()}:${date.getSeconds()} ${ampm}`;
+        };
+
+        // scenario model
+        function Scenario(scenario) {
+            var _scenario = this;
+
+            _scenario._id = ko.observable((scenario) ? scenario._id || undefined : undefined);
+            _scenario.project = ko.observable((scenario) ? scenario.project || undefined : undefined);
+            _scenario.projectName = ko.observable((scenario) ? scenario.projectName || undefined : undefined);
+            _scenario.module = ko.observable((scenario) ? scenario.module || '' : '');
+            _scenario.name = ko.observable((scenario) ? scenario.name || undefined : undefined);
+            _scenario.author = ko.observable((scenario) ? scenario.author || undefined : undefined);
+            _scenario.updatedBy = ko.observable((scenario) ? scenario.updatedBy : undefined);
+            _scenario.status = ko.observable((scenario) ? scenario.status || undefined : undefined);
+            _scenario.createdDate = ko.observable((scenario) ? scenario.createdDate || undefined : undefined);
+            _scenario.updatedDate = ko.observable((scenario) ? scenario.updatedDate || undefined : undefined);
+            _scenario.steps = ko.observableArray();
+
+            _scenario.edit = ko.computed(function () {
+                var path = `/scenarioeditor?project=${encodeURIComponent(root.project)}&name=${encodeURIComponent(_scenario.name())}&type=edit`;
+                if (encodeURIComponent(_scenario.module()) != 'undefined'){
+                    path += `&module=${encodeURIComponent(_scenario.module())}`;
+                }
+                return path;
+            });
+
+            _scenario.clone = ko.computed(function () {
+                var path = `/scenarioeditor?project=${encodeURIComponent(root.project)}&name=${encodeURIComponent(_scenario.name())}&type=clone`;
+                if (encodeURIComponent(_scenario.module()) != 'undefined'){
+                    path += `&module=${encodeURIComponent(_scenario.module())}`;
+                }
+                return path;
+            });
+
+            if (scenario.steps) {
+                var mapping = {
+                    'steps': {
+                        create: function (options) {
+                            return new Step(options.data);
+                        }
+                    }
+                }
+
+                var mappingData = { steps: scenario.steps };
+                ko.mapping.fromJS(mappingData, mapping, _scenario);
+            };
+
+            _scenario.delete = function () {
+                $.ajax({
+                    type: 'DELETE',
+                    url: `/api/scenarios/${_scenario._id()}`,
+                    success: function (result) {
+                        if (result.success) {
+                            root.scenarios.remove(_scenario);
+                            toastrTrigger(result.message);
+                        }
+                    }
+                });
+            };
+
+            _scenario.updateStatus = function (item, event) {
+                root.isLoadingScenarios(true);
+                var oldUpdatedBy = _scenario.updatedBy();
+                var oldStatus = _scenario.status();
+                var oldUpdatedDate = _scenario.updatedDate();
+                _scenario.updatedBy(_author);
+                _scenario.updatedDate(new Date());
+                _scenario.status(event.target.textContent);
+                $.ajax({
+                    type: 'POST',
+                    url: `/api/scenarios/status`,
+                    data: JSON.stringify({ test: JSON.parse(ko.toJSON(_scenario)), lastUpdatedBy: _author }),
+                    contentType: 'application/json; charset=utf-8',
+                    dataType: 'json',
+                    success: function (result) {
+                        if (result.success) {
+                            // if result returned successful
+                            root.isLoadingScenarios(false);
+                            toastrTrigger(result.message); // trigger snackbar
+                        } else {
+                            _scenario.updatedBy(oldUpdatedBy);
+                            _scenario.updatedDate(oldUpdatedDate);
+                            _scenario.status(oldStatus);
+                            root.isLoadingScenarios(false);
+                            toastrTrigger(result.message, undefined, 'error');
+                        }
+                    }
+                });
+            };
+        };
+
+        function Step(step) {
+            var _step = this;
+
+            _step._id = ko.observable((step) ? step._id || undefined : undefined);
+            _step.option = ko.observable((step) ? step.option || undefined : undefined);
+            _step.page = ko.observable((step) ? step.page || undefined : undefined);
+            _step.action = ko.observable((step) ? step.action || undefined : undefined);
+            _step.object = ko.observable((step) ? step.object || undefined : undefined);
+            _step.testData = ko.observable((step) ? step.testData || undefined : undefined);
+            _step.assertions = ko.observableArray();
+            if (step.assertions) {
+                var mapping = {
+                    'assertions': {
+                        create: function (options) {
+                            return new Assertion(options.data);
+                        }
+                    }
+                }
+
+                var mappingData = { assertions: step.assertions };
+                ko.mapping.fromJS(mappingData, mapping, _step);
+            }
+        };
+
+        function Assertion(assertion) {
+            var _assertion = this;
+
+            _assertion._id = ko.observable((assertion) ? assertion._id || undefined : undefined);
+            _assertion.page = ko.observable((assertion) ? assertion.page || undefined : undefined);
+            _assertion.element = ko.observable((assertion) ? assertion.element || undefined : undefined);
+            _assertion.assertion = ko.observable((assertion) ? assertion.assertion || undefined : undefined);
+            _assertion.attribute = ko.observable((assertion) ? assertion.attribute || undefined : undefined);
+            _assertion.expected = ko.observable((assertion) ? assertion.expected || undefined : undefined);
+            _assertion.message = ko.observable((assertion) ? assertion.message || undefined : undefined);
+        };
+
+        // #########################################
+        // DATA VARIABLES - USED FOR INTERFACE DATA PRESENTATION
+        // #########################################
+
+        root.scenarios = ko.observableArray([]);
+        root.quickSearchCriteria = ko.observable('');
+        root.quickSearchFilter = ko.observable({ name: 'Scenario Name', value: 'name' });
+        root.availableProjects = ko.observableArray();
+        root.availableAuthors = ko.observableArray();
+
+        // #########################################
+        // UI VARIABLES (ex. loading)
+        // #########################################
+
+        root.isLoadingScenarios = ko.observable(true);
+        root.enableRun = ko.observable(false);
+        root.isZeroResult = ko.observable(false);
+        root.pageSizes = ko.observable([
+            { name: '10 per page', value: 10 },
+            { name: '25 per page', value: 25 },
+            { name: '50 per page', value: 50 },
+            { name: 'Show All', value: 0 }
+        ]);
+        root.pageSize = ko.observable(root.pageSizes()[0]);
+        root.pageIndex = ko.observable(0);
+        root.previousPage = function () {
+            if (root.pageIndex() > 0) {
+                root.pageIndex(root.pageIndex() - 1);
+            }
+        };
+        root.nextPage = function () {
+            if (root.pageIndex() >= 0 && root.pageIndex() < root.maxPageIndex()) {
+                root.pageIndex(root.pageIndex() + 1);
+            }
+        };
+        root.gotoPage = function (data) {
+            root.pageIndex(data);
+        };
+        root.maxPageIndex = ko.computed(function () {
+            if (root.pageSize().value == 0)
+                return 0;
+
+            return Math.ceil(root.scenarios().length / root.pageSize().value - 1)
+        }, root);
+        root.pagedScenarios = ko.computed(function () {
+            var size = (root.pageSize().value == 0) ? root.scenarios().length : root.pageSize().value;
+            var start = root.pageIndex() * size;
+            return root.scenarios.slice(start, start + size);
+        }, root);
+
+        // #########################################
+        // FUNCTIONS - TRIGGER EVENTS
+        // #########################################
+        
+        root.changeQuickSearch = function (data) {
+            root.quickSearchFilter(data); // updated selected quicksearch from selection
+        };
+        root.quickSearch = function () {
+            // quick search function
+            var query = { project: root.project };
+            // use quicksearch filter as object key (ex. { project: criteria })
+            query[root.quickSearchFilter().value] = {
+                $regex: root.quickSearchCriteria(),
+                $options: 'i'
+            };
+            root.searchScenarios(query); // trigger ajax query scripts
+        };
+        root.aqSearchClear = function (clearQuickSearch) {
+            // clear advance and/or quick search
+            $('select.aSearchSelect2').each(function (index, element) {
+                $(element).select2("val", ""); // foreach select2 element in ui - set value to empty
+            });
+            // clear filter observables
+            root.aSearchScenario('');
+            root.aSearchAuthor([]);
+            root.aSearchStatus([]);
+            root.aSearchCreatedDate(undefined);
+            root.aSearchUpdatedDate(undefined);
+            root.createdSelectedRange(undefined);
+
+            if (clearQuickSearch) { // optional - clear quicksearch (boolean)
+                root.quickSearchCriteria('');
+                root.searchScenarios({ project: root.project });
+            }
+        };
+
+        // #########################################
+        // AJAX REQUESTS - API REQUESTS
+        // #########################################
+
+        root.searchScenarios = function (query, options, initialize) {
+            root.isLoadingScenarios(true); // trigger loading
+            // post request - pass query object & options
+            $.ajax({
+                type: 'POST',
+                url: '/api/getScenarios',
+                data: JSON.stringify({ query: query || {}, options: options }),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    // mapping condition for converting json to viewmodel data
+                    var mapping = {
+                        // view model observable named - pagedScenario
+                        'scenarios': {
+                            // create objects using Scenario model
+                            create: function (options) {
+                                options.data.updatedBy = options.data.lastUpdatedBy;
+                                return new Scenario(options.data);
+                            }
+                        }
+                    };
+
+                    // foreach scenario from result, convert into script model and pass to pagedscript observableArray, in root (this) viewmodel
+                    ko.mapping.fromJS({ scenarios: result }, mapping, root);
+
+                    // if initialization
+                    if (initialize) {
+                        root.availableProjects(result.map(function (item) { return item.projectName }).unique()); // get unique projects from result
+                        root.availableAuthors(result.map(function (item) { return item.author }).unique()); // get unique authors from result
+                    }
+
+                    if (!initialize)
+                        if (result.length > 0) {
+                            root.isZeroResult(false);
+                            $('#advance-search-modal').modal('hide');
+                        } else {
+                            root.isZeroResult(true);
+                        }
+
+                    root.isLoadingScenarios(false); // stop loading
+                }
+            });
+        };
+
+        // #########################################
+        // INITIALIZATION
+        // #########################################
+
+        root.searchScenarios({ project: root.project }, null, true); // empty query, empty options, initialization = true
+
+        // #########################################
+        // BINDING HANDLERS
+        // #########################################
+
+        ko.bindingHandlers.filterForm = {
+            init: function (element, valueAccessor) {
+                // observables used for advanced search
+                root.aSearchScenario = ko.observable('');
+                root.aSearchAuthor = ko.observableArray();
+                root.aSearchStatus = ko.observableArray();
+                root.aSearchCreatedDate = ko.observable();
+                root.aSearchUpdatedDate = ko.observable();
+
+                // extract data from array observable
+                function extract(key, array) {
+                    if (array.length > 0) { // if array is greater than 0
+                        var q = { $or: [] }; // create query $or condition
+                        array.forEach(function (criteria) {
+                            q.$or.push({ [key]: criteria }); // pass criteria
+                        })
+                        return q;
+                    }
+                    return null;
+
+                    // this functions generates query (ex.)
+                    // $or: [
+                    //  { project: 'new project' },
+                    //  { project: 'old project' }    
+                    // ]
+                };
+
+                function extractDate(key, dateRange) {
+                    if (!dateRange)
+                        return null;
+
+                    if (dateRange.includes('~')) {
+                        var ranges = dateRange.split('~');
+                        var first = ranges.shift();
+                        var last = ranges.pop();
+
+                        return { [key]: { $gt: first, $lt: last } };
+                    }
+                }
+
+                // when form is submitted
+                $(element).submit(function (event) {
+                    event.preventDefault(); // prevent page refresh
+                    var query = {}; // query to be filled by conditions
+
+                    $and = [
+                        { project: root.project }
+                    ]; // and condition
+
+                    if (root.aSearchScenario() != '') { // generate regular expression query for script name if any
+                        $and.push({ name: { $regex: root.aSearchScenario(), $options: 'i' } });
+                    }
+
+                    var authorQ = extract('author', root.aSearchAuthor());
+                    if (authorQ) $and.push(authorQ); // generate $or query for author if any
+
+                    var statusQ = extract('status', root.aSearchStatus());
+                    if (statusQ) $and.push(statusQ); // generate $or query for status if any
+
+                    var createdQ = extractDate('createdDate', root.aSearchCreatedDate());
+                    if (createdQ) $and.push(createdQ);
+
+                    var updatedQ = extractDate('updatedDate', root.aSearchUpdatedDate());
+                    if (updatedQ) $and.push(updatedQ);
+
+                    if ($and.length > 0) query = { $and: $and }; // if $and condition contains a condition, push to query
+
+                    root.searchScenarios(query); // trigger query search & pass query
+                })
+            }
+        };
+
+        ko.bindingHandlers.select2 = {
+            init: function (element, valueAccessor) {
+                var accessors = ko.unwrap(valueAccessor()); // variables passed from databinding
+                $(element).select2({
+                    placeholder: accessors.placeholder // placeholder from valueAccessor
+                }).on('change', function (event) { // if changed happened on select2
+                    if (event.added) // if change is adding
+                        accessors.observable.push(event.added.text); // add selected to observable from valueAccessor
+                    if (event.removed) // if change is removing
+                        accessors.observable.splice(accessors.observable().indexOf(event.removed.text), 1); // remove selected to observable from valueAccessor
+                });
+            }
+        };
+
+        root.createdSelectedRange = ko.observable();
+        root.createdSelectedDate = ko.observable();
+        root.updatedDateRanges = ko.computed(function () {
+            var obj = {
+                'Today': [moment(), moment()],
+                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                'This Month': [moment().startOf('month'), moment().endOf('month')],
+                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+            };
+
+            if (root.createdSelectedRange() == 'Today') {
+                return obj = {
+                    'Today': [moment(), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Yesterday') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 7 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 30 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                    'Last 30 Days': [moment().subtract(29, 'days'), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last Month') {
+                return obj = {
+                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'This Month') {
+                return obj = {
+                    'This Month': [moment().startOf('month'), moment().endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Custom Range') {
+                return obj = {};
+            }
+
+            return obj;
+        });
+
+        ko.bindingHandlers.datePicker = {
+            init: function (element, valueAccessor) {
+                $(element).daterangepicker({
+                    locale: {
+                        cancelLabel: 'Clear'
+                    },
+                    ranges: {
+                        'Today': [moment(), moment()],
+                        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                        'This Month': [moment().startOf('month'), moment().endOf('month')],
+                        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                    },
+                    drops: 'down',
+                    opens: 'center',
+                    minDate: '01/01/2017',
+                    maxDate: moment()
+                });
+
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+
+                $(element).on('apply.daterangepicker', function (event, picker) {
+                    if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                        $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")}`);
+                    } else {
+                        $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                    }
+
+                    if (pickerType == 'Created') {
+                        if (picker.chosenLabel == 'Custom Range')
+                            root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                        root.createdSelectedRange(picker.chosenLabel);
+                        root.aSearchUpdatedDate(undefined);
+                    }
+
+                    root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                });
+
+                $(element).on('cancel.daterangepicker', function (event, picker) {
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                    root[observable](undefined);
+                });
+            },
+            update: function (element, valueAccessor) {
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+                if (!root[observable]())
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+
+                if (pickerType == 'Updated') {
+                    var min;
+                    var max;
+                    if (root.createdSelectedRange() == 'Custom Range') {
+                        var range = root.createdSelectedDate().split('~');
+                        min = range.shift();
+                        max = range.pop();
+                    }
+                    $(element).daterangepicker({
+                        locale: {
+                            cancelLabel: 'Clear'
+                        },
+                        ranges: root.updatedDateRanges(),
+                        drops: 'down',
+                        opens: 'center',
+                        minDate: (min) ? moment(min) : '01/01/2017',
+                        maxDate: (max) ? moment(max) : moment()
+                    });
+
+                    var pickerType = $(element).data('picker-date');
+                    var observable = $(element).data('picker-observable');
+
+                    $(element).on('apply.daterangepicker', function (event, picker) {
+                        if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                            $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")}`);
+                        } else {
+                            $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                        }
+
+                        if (pickerType == 'Created') {
+                            if (picker.chosenLabel == 'Custom Range')
+                                root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                            root.createdSelectedRange(picker.chosenLabel);
+                            root.aSearchUpdatedDate(undefined);
+                        }
+
+                        root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                    });
+
+                    $(element).on('cancel.daterangepicker', function (event, picker) {
+                        $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                        root[observable](undefined);
+                    });
+                }
+            }
+        };
+
+        ko.bindingHandlers.returnAction = {
+            init: function (element, valueAccessor) {
+                $(element).keydown(function (e) { // listen to keydown (keyboard press) event
+                    if (e.which === 13) { // if user pressed 'enter' 
+                        var observable = valueAccessor(); // get observable from valueAccessor
+                        observable(); // trigger observable
+                    }
+                });
+            }
+        };
+    };
+
+    // #########################################
+    // APPLY BINDINGS :)
+    // #########################################
+    ko.applyBindings(new ScenarioRepositoryViewModel(), document.getElementById('wrapper-content'));
+
+</script>

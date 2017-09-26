@@ -1,0 +1,109 @@
+<center style="width:100%;min-width:580px">
+    <table style="border-spacing:0;border-collapse:collapse;padding:0;vertical-align:top;background:#fefefe;width:580px;margin:0 auto;text-align:inherit;max-width:580px;">
+        <tbody>
+            <tr style="padding:0;vertical-align:top;text-align:left">
+                <td style="font-size:16px;word-wrap:break-word;-webkit-hyphens:auto;-moz-hyphens:auto;hyphens:auto;vertical-align:top;text-align:left;line-height:1.3;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;padding:0;margin:0;font-weight:normal;border-collapse:collapse !important">
+                    <div>
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="font-size:16px;padding:0;text-align:left;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;line-height:1.3;margin:0 auto;padding-bottom:16px;width:564px;padding-left:16px;padding-right:16px">
+                                        <a href="http://<%= host.host %>:<%= host.port %>/api/user_verification/forgot_password_setup?token=<%= verification.token %>&amp;user_id=<%= verification.user_id %>" style="font-family:Helvetica, Arial, sans-serif;font-weight:normal;padding:0;margin:0;text-align:left;line-height:1.3;color:#2199e8;text-decoration:none"
+                                            target="_blank" rel="noopener">
+                                            <img align="center" alt="" height="50" src="http://<%= host.host %>:<%= host.port %>/img/pawleap.png"
+                                                style="display:block;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;width:auto;max-width:100%;clear:both;border:none;padding-top:48px;padding-bottom:16px;max-height:50px">
+                                                </a>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="font-size:16px;padding:0;text-align:left;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;line-height:1.3;margin:0 auto;width:564px;padding-left:16px;padding-right:16px">
+                                        <p style="font-family:Helvetica, Arial, sans-serif;padding:0;margin:0;line-height:1.4;font-weight:300;color:#484848;font-size:18px;hyphens:none;-ms-hyphens:none;-webkit-hyphens:none;-moz-hyphens:none;text-align:left;margin-bottom:0px !important">
+                                            Hi <%= user.firstName %>,
+                                        </p>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="font-size:16px;padding:0;text-align:left;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;line-height:1.3;margin:0 auto;width:564px;padding-left:16px;padding-bottom:16px;padding-right:16px">
+                                        <p style="font-family:Helvetica, Arial, sans-serif;padding:0;margin:0;line-height:1.4;font-weight:300;color:#484848;font-size:18px;hyphens:none;-ms-hyphens:none;-webkit-hyphens:none;-moz-hyphens:none;text-align:left;margin-bottom:0px !important">
+                                            Reset password for <%= user.username %> has been requested.
+                                        </p>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding-top:8px">
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;padding:0;margin:0;text-align:left;font-size:16px;line-height:1.3;padding-left:16px;padding-bottom:16px;padding-right:16px">
+                                        <a href="http://<%= host.host %>:<%= host.port %>/api/user_verification/forgot_password_setup?token=<%= verification.token %>&amp;user_id=<%= verification.user_id %>&amp;type=<%= verification.type %>"
+                                            style="font-weight:normal;margin:0;text-align:left;line-height:1.3;color:#2199e8;text-decoration:none;font-family:Helvetica, Arial, sans-serif;background-color:#005DCF;-webkit-border-radius:3px;-moz-border-radius:3px;border-radius:100px;display:inline-block;padding:12px 24px 12px 24px"
+                                            target="_blank" rel="noopener">
+                                            <p style="font-weight:normal;padding:0;margin:0;text-align:center;color:white;font-family:&quot;Helvetica&quot;, Helvetica, Arial, sans-serif;font-size:18px;line-height:26px;margin-bottom:0px !important">
+                                                Setup Password
+                                            </p>
+                                        </a>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding-top:8px">
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="font-size:16px;padding:0;text-align:left;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;line-height:1.3;margin:0 auto;padding-bottom:16px;width:564px;padding-left:16px;padding-right:16px">
+                                        <p style="font-family:Helvetica, Arial, sans-serif;padding:0;margin:0;line-height:1.4;font-weight:300;color:#484848;font-size:13px;hyphens:none;-ms-hyphens:none;-webkit-hyphens:none;-moz-hyphens:none;text-align:left;margin-bottom:0px !important">
+                                        Having trouble? You may use this link below
+                                        </p>
+                                        <p style="font-family:Helvetica, Arial, sans-serif;padding:0;margin:0;line-height:1.4;font-weight:300;color:#484848;font-size:13px;hyphens:none;-ms-hyphens:none;-webkit-hyphens:none;-moz-hyphens:none;text-align:left;margin-bottom:0px !important">
+                                        <a href="http://<%= host.host %>:<%= host.port %>/api/user_verification/forgot_password_setup?token=<%= verification.token %>&amp;user_id=<%= verification.user_id %>&amp;type=<%= verification.type %>">http://<%= host.host %>:<%= host.port %>/api/user_verification/forgot_password_setup?token=<%= verification.token %>&amp;user_id=<%= verification.user_id %>&amp;type=<%= verification.type %></a>
+                                        </p>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding-top:24px">
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="font-size:16px;padding:0;text-align:left;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;line-height:1.3;margin:0 auto;padding-bottom:16px;width:564px;padding-left:16px;padding-right:16px">
+                                        <p style="font-family:Helvetica, Arial, sans-serif;padding:0;margin:0;line-height:1.4;font-weight:300;color:#484848;font-size:18px;hyphens:none;-ms-hyphens:none;-webkit-hyphens:none;-moz-hyphens:none;text-align:left;margin-bottom:0px !important">
+                                            Thanks,<br>The Leap Team </p>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding-top:20px">
+                        <table style="border-spacing:0;border-collapse:collapse;text-align:left;vertical-align:top;padding:0;width:100%;display:table">
+                            <tbody>
+                                <tr style="padding:0;vertical-align:top;text-align:left">
+                                    <th style="font-size:16px;text-align:left;line-height:1.3;color:#0a0a0a;font-family:Helvetica, Arial, sans-serif;font-weight:normal;padding:0;margin:0 auto;padding-bottom:16px;width:564px;padding-left:16px;padding-right:16px">
+                                        <hr style="clear:both;max-width:580px;border-right:0;border-bottom:1px solid #cacaca;border-left:0;border-top:0;background-color:#dbdbdb;height:2px;width:100%;border:none;margin:auto">
+                                        <div style="padding-bottom:32px">
+                                        </div>
+                                    </th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</center>

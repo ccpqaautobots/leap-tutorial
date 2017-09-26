@@ -1,0 +1,635 @@
+<script type="text/javascript">
+    var _token = '<%= user.token %>';
+    var _suiteId = '<%= suiteId %>';
+
+    function ViewTestResults() {
+        var root = this;
+
+        // #########################################
+        // MODELS - FOR EASY DATA MANIPULATION
+        // #########################################
+
+        // test result model
+        function TestResult(tresult) {
+            var _tresult = this;
+
+            _tresult.oldStatus = ko.observable((tresult) ? tresult.status || undefined : undefined);
+
+            _tresult._id = ko.observable((tresult) ? tresult._id || undefined : undefined);
+            _tresult.runBy = ko.observable((tresult) ? tresult.runBy || undefined : undefined);
+            _tresult.runDate = ko.observable((tresult) ? tresult.runDate || undefined : undefined);
+            _tresult.isFailure = ko.observable((tresult) ? tresult.isFailure || false : false);
+            _tresult.status = ko.observable((tresult) ? tresult.status || undefined : undefined);
+            _tresult.totalPassed = ko.observable((tresult) ? tresult.totalPassed || 0 : 0);
+            _tresult.totalFailed = ko.observable((tresult) ? tresult.totalFailed || 0 : 0);
+            _tresult.totalWarning = ko.observable((tresult) ? tresult.totalWarning || 0 : 0);
+            _tresult.total = ko.observable((tresult) ? tresult.total || 0 : 0);
+            _tresult.duration = ko.observable((tresult) ? tresult.duration || 0 : 0);
+            _tresult.logs = ko.observable((tresult) ? tresult.logs || undefined : undefined);
+            _tresult.done = ko.observable((tresult) ? tresult.done || false : false);
+            _tresult.remarks = ko.observable((tresult) ? tresult.remarks || undefined : undefined);
+            _tresult.isSuite = ko.observable((tresult) ? tresult.isSuite || false : false);
+            _tresult.isScript = ko.observable((tresult) ? tresult.isScript || false : false);
+            _tresult.suiteId = ko.observable((tresult) ? tresult.suiteId || undefined : undefined);
+            _tresult.scriptId = ko.observable((tresult) ? tresult.scriptId || undefined : undefined);
+            _tresult.referenceId = ko.observable((tresult) ? tresult.referenceId || undefined : undefined);
+            _tresult.project = ko.observable((tresult) ? tresult.project || undefined : undefined);
+            _tresult.projectName = ko.observable((tresult) ? tresult.projectName || undefined : undefined);
+            _tresult.subProject = ko.observable((tresult) ? tresult.subProject || undefined : undefined);
+            _tresult.testName = ko.observable((tresult) ? tresult.testName || undefined : undefined);
+            _tresult.author = ko.observable((tresult) ? tresult.author || undefined : undefined);
+            _tresult.failureCause = ko.observable((tresult) ? tresult.failureCause || undefined : undefined);
+            _tresult.scenarios = ko.observableArray([]);
+            _tresult.scripts = ko.observableArray([]);
+            _tresult.originalScriptsResults = ko.observableArray([]);
+            _tresult.scriptsResults = ko.observableArray([]);
+            _tresult.selectedStatus = ko.observable();
+            _tresult.selectedFailureCause = ko.observable();
+            _tresult.forMaintenance = ko.observable(false);
+            _tresult.isValid = ko.computed(function () {
+                if (_tresult.status() == 'Failed')
+                    if (!_tresult.failureCause())
+                        return 2; // 'Please provide a cause of failure.';
+
+                if (_tresult.status() != _tresult.oldStatus())
+                    if (!_tresult.remarks())
+                        return 3; // 'Please provide a remarks';
+
+                return true;
+            });
+
+            if (tresult.status) {
+                var status = root.statuses().filter(_ => _.value == tresult.status);
+                _tresult.selectedStatus((status.length > 0) ? status[0] : root.statuses()[0]);
+            }
+
+            if (tresult.failureCause) {
+                var failure = root.failureCauses().filter(_ => _.value == tresult.failureCause);
+                _tresult.selectedFailureCause((failure.length > 0) ? failure[0] : root.failurecases()[0]);
+            }
+
+            if (tresult.scenarios) {
+                var mapping = {
+                    'scenarios': {
+                        create: function (options) {
+                            return new Scenario(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ scenarios: tresult.scenarios }, mapping, _tresult);
+            };
+
+            if (tresult.scripts) {
+                var mapping = {
+                    'scripts': {
+                        create: function (options) {
+                            return new Script(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ scripts: tresult.scripts }, mapping, _tresult);
+
+                _tresult.scripts().forEach(function (script_result) {
+                    $.ajax({
+                        type: 'GET',
+                        url: `/api/test_result/${script_result.testResultId()}`,
+                        headers: {
+                            'x-access-token': _token || undefined
+                        },
+                        success: function (result) {
+                            _tresult.originalScriptsResults.push(new TestResult(result));
+                            _tresult.scriptsResults.push(new TestResult(result));
+                        }
+                    });
+                });
+            };
+
+            _tresult.selectedStatus.subscribe(function (newValue) {
+                _tresult.status(newValue.value);
+                if (newValue.value != 'Failed')
+                    _tresult.selectedFailureCause(root.failureCauses()[0]);
+            });
+
+            _tresult.selectedFailureCause.subscribe(function (newValue) {
+                if (newValue.value == 'script')
+                    _tresult.forMaintenance(true);
+                else
+                    _tresult.forMaintenance(false);
+
+                _tresult.failureCause(newValue.value);
+            });
+
+            _tresult.logsFormatted = ko.computed(function () {
+                if (_tresult.logs())
+                    return _tresult.logs().split('\n');
+            });
+
+            if (!_tresult.done() && _tresult.isSuite() && _tresult.isScript()) {
+                var getResults = setInterval(function () {
+                    $.ajax({
+                        type: 'GET',
+                        url: `/api/test_result/${_tresult._id()}`,
+                        success: function (finished_result) {
+                            var mapping = {
+                                'testresult': {
+                                    create: function (options) {
+                                        return new TestResult(options.data);
+                                    }
+                                }
+                            };
+
+                            ko.mapping.fromJS(finished_result, mapping, _tresult);
+
+                            if (finished_result.done)
+                                clearInterval(getResults);
+                        }
+                    });
+                }, 5000);
+            }
+
+            // fetch updates when result not done
+            if (!_tresult.done() && !(_tresult.isSuite() && _tresult.isScript())) {
+                var getResults = setInterval(function () {
+                    $.ajax({
+                        type: 'GET',
+                        url: `/api/queuer_info?_id=${(_tresult.isSuite() && _tresult.isScript()) ? _suiteId : _tresult._id()}`,
+                        headers: {
+                            'x-access-token': _token || undefined
+                        },
+                        success: function (result) {
+                            if (_tresult.isSuite() && !_tresult.isScript()) {
+                                if (!result) {
+                                    _tresult.done(true);
+                                    clearInterval(getResults);
+                                    $.ajax({
+                                        type: 'GET',
+                                        url: `/api/test_result/${_tresult._id()}`,
+                                        success: function (finished_result) {
+                                            var mapping = {
+                                                'testresult': {
+                                                    create: function (options) {
+                                                        return new TestResult(options.data);
+                                                    }
+                                                }
+                                            };
+
+                                            ko.mapping.fromJS({ testresult: finished_result }, mapping, root);
+                                        }
+                                    });
+                                } else {
+                                    _tresult.logs(result.result.logs);
+                                }
+                            } else if (!_tresult.isSuite() && _tresult.isScript()) {
+                                if (!result) {
+                                    _tresult.done(true);
+                                    clearInterval(getResults);
+                                    $.ajax({
+                                        type: 'GET',
+                                        url: `/api/test_result/${_tresult._id()}`,
+                                        success: function (finished_result) {
+                                            var mapping = {
+                                                'testresult': {
+                                                    create: function (options) {
+                                                        return new TestResult(options.data);
+                                                    }
+                                                }
+                                            };
+
+                                            ko.mapping.fromJS({ testresult: finished_result }, mapping, root);
+                                        }
+                                    });
+                                } else {
+                                    _tresult.logs(result.result.logs);
+                                }
+                            }
+                        }
+                    })
+                }, 5000);
+            }
+        };
+
+        // test result scenario model
+        function Scenario(scenario) {
+            var _scenario = this;
+
+            _scenario.name = ko.observable((scenario) ? scenario.name || undefined : undefined);
+            _scenario.passed = ko.observable((scenario) ? scenario.passed || undefined : undefined);
+            _scenario.failed = ko.observable((scenario) ? scenario.failed || undefined : undefined);
+            _scenario.errors = ko.observable((scenario) ? scenario._errors || undefined : undefined);
+            _scenario.skipped = ko.observable((scenario) ? scenario.skipped || undefined : undefined);
+            _scenario.duration = ko.observable((scenario) ? scenario.duration || undefined : undefined);
+            _scenario.isFailure = ko.observable((scenario) ? scenario.isFailure || false : false);
+            _scenario.steps = ko.observableArray([]);
+            _scenario.assertions = ko.observableArray([]);
+
+            _scenario.selectedStepIndex = ko.observable(undefined);
+            _scenario.selectedStepAssertions = ko.observable(undefined);
+            _scenario.viewAssertion = function (index) {
+                _scenario.selectedStepIndex(index);
+                _scenario.selectedStepAssertions(_scenario.steps()[index].assertions());
+            };
+
+            if (scenario.steps) {
+                var mapping = {
+                    'steps': {
+                        create: function (options) {
+                            return new Step(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ steps: scenario.steps }, mapping, _scenario);
+            }
+
+            if (scenario.assertions) {
+                var mapping = {
+                    'assertions': {
+                        create: function (options) {
+                            return new Assertion(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ assertions: scenario.assertions }, mapping, _scenario);
+            }
+        };
+
+        // test result steps model
+        function Step(step) {
+            var _step = this;
+
+            _step.option = ko.observable((step) ? step.option || undefined : undefined);
+            _step.page = ko.observable((step) ? step.page || undefined : undefined);
+            _step.action = ko.observable((step) ? step.action || undefined : undefined);
+            _step.object = ko.observable((step) ? step.object || undefined : undefined);
+            _step.message = ko.observable((step) ? step.message || undefined : undefined);
+            _step.isFailure = ko.observable((step) ? step.isFailure || false : false);
+            _step.testData = ko.observableArray([]);
+            _step.assertions = ko.observableArray([]);
+
+            if (step.testData) {
+                var mapping = {
+                    'testData': {
+                        create: function (options) {
+                            return new TestData(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ testData: step.testData }, mapping, _step);
+            }
+
+            if (step.assertions) {
+                var mapping = {
+                    'assertions': {
+                        create: function (options) {
+                            return new Assertion(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ assertions: step.assertions }, mapping, _step);
+            }
+        };
+
+        function Script(script) {
+            var _script = this;
+
+            _script.scriptId = ko.observable((script) ? script.scriptId || undefined : undefined);
+            _script.testResultId = ko.observable((script) ? script.testResultId || undefined : undefined);
+        };
+
+        // test result test data model
+        function TestData(testData) {
+            var _testData = this;
+
+            _testData.input = ko.observable((testData) ? testData.input || undefined : undefined);
+            _testData.target = ko.observable((testData) ? testData.target || undefined : undefined);
+        };
+
+        // test result assertion model
+        function Assertion(assertion) {
+            var _assertion = this;
+
+            _assertion.page = ko.observable((assertion) ? assertion.page || undefined : undefined);
+            _assertion.element = ko.observable((assertion) ? assertion.element || undefined : undefined);
+            _assertion.assertion = ko.observable((assertion) ? assertion.assertion || undefined : undefined);
+            _assertion.attribute = ko.observable((assertion) ? assertion.attribute || undefined : undefined);
+            _assertion.expected = ko.observable((assertion) ? assertion.expected || undefined : undefined);
+
+            _assertion.message = ko.observable((assertion) ? assertion.message || undefined : undefined);
+            _assertion.stackTrace = ko.observable((assertion) ? assertion.stackTrace || undefined : undefined);
+            _assertion.fullMsg = ko.observable((assertion) ? assertion.fullMsg || undefined : undefined);
+            _assertion.isFailure = ko.observable((assertion) ? assertion.isFailure || false : false);
+        };
+
+        // #########################################
+        // DATA VARIABLES - USED FOR INTERFACE DATA PRESENTATION
+        // #########################################
+
+        root.testresult = ko.observable();
+        root.editing = ko.observable(false);
+        root.statuses = ko.observableArray([
+            { name: 'Passed', value: 'Passed' },
+            { name: 'Failed', value: 'Failed' },
+            { name: 'Warning', value: 'Warning' }
+        ]);
+        root.failureCauses = ko.observableArray([
+            { name: '', value: undefined },
+            { name: 'Application Timeout', value: 'timeout' },
+            { name: 'Validation', value: 'validaton' },
+            { name: 'Functionality', value: 'functionality' },
+            { name: 'Cosmetic', value: 'cosmetic' },
+            { name: 'Data Issue', value: 'data' },
+            { name: 'Compatibility', value: 'compatibility' },
+            { name: 'Notification', value: 'notification' },
+            { name: 'Script Error', value: 'script' }
+        ]);
+
+        // #########################################
+        // FUNCTIONS - TRIGGER EVENTS
+        // #########################################
+
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, title || 'Test Result Editor');
+            }, 500);
+        };
+
+        root.triggerEdit = function () {
+            root.editing(true);
+        };
+
+        root.cancelEdit = function () {
+            root.editing(false);
+            root.testresult().scriptsResults(root.testresult().originalScriptsResults());
+        };
+
+        function cleanUpAndGetPayload() {
+            // cleaning payload
+            var payload = JSON.parse(ko.toJSON(root.testresult()));
+            delete payload.oldStatus;
+            delete payload.runBy;
+            delete payload.logs;
+            delete payload.done;
+            delete payload.selectedStatus;
+            delete payload.selectedFailureCause;
+            delete payload.isValid;
+            delete payload['__ko_mapping__'];
+            delete payload.logsFormatted;
+
+            payload.scriptsResults.forEach(function (script_result) {
+                delete script_result.oldStatus;
+                delete script_result.runBy;
+                delete script_result.logs;
+                delete script_result.done;
+                delete script_result.selectedStatus;
+                delete script_result.selectedFailureCause;
+                delete script_result.isValid;
+                delete script_result.scenarios;
+                delete script_result['__ko_mapping__'];
+                delete script_result.logsFormatted;
+                delete script_result.scriptsResults;
+            });
+
+            return JSON.stringify(payload);
+        };
+
+        root.triggerSaveConfirmation = function() {
+            $('#save-confirmation-modal').modal('show');
+        };
+
+        root.save = function() {
+            $.ajax({
+                type: 'PUT',
+                url: '/api/testresult/update',
+                data: cleanUpAndGetPayload(),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (response) {
+                    if (response.success) {
+                        toastrTrigger(response.message);
+                        root.testresult().scriptsResults().forEach(function(scriptResult) {
+                            scriptResult.oldStatus(scriptResult.status());
+                        });
+                        root.editing(false);
+                    } else {
+                        toastrTrigger(response.message, null, 'error');
+                    }
+                }
+            });
+        };
+
+        // #########################################
+        // UI VARIABLES - FOR FANCY UI EFFECTS (ex. loading)
+        // #########################################
+
+        root.disableSaving = ko.computed(function() {
+            if (!root.testresult())
+                return true;
+
+            if (root.testresult().scriptsResults().some(_ => _.isValid() != true))
+                return true;
+
+            return false;
+        });
+
+        function OneOrMoreTime(value, type) {
+            if (value > 0) {
+                if (value == 1)
+                    return `${value} ${type} `
+                else
+                    return `${value} ${type}s `
+            } else {
+                return '';
+            }
+        };
+
+        root.convertToTime = function (duration) {
+            var milliseconds = parseInt((duration % 1000) / 100)
+                , seconds = parseInt((duration / 1000) % 60)
+                , minutes = parseInt((duration / (1000 * 60)) % 60)
+                , hours = parseInt((duration / (1000 * 60 * 60)) % 24);
+
+            return `${OneOrMoreTime(hours, 'hour')}${OneOrMoreTime(minutes, 'minute')}${OneOrMoreTime(seconds, 'second')}`;
+        };
+
+        root.formatDate = function (knockoutDate) {
+            if (knockoutDate() === undefined)
+                return null;
+
+            var date = new Date(knockoutDate());
+            return moment(date).format("YYYY-MM-DD HH:mm:ss");
+        };
+
+        root.customScenarioTitle = function (scenario, index) {
+            var passed = '<span style="color: #00cc00">Passed</span>';
+            var failed = '<span style="color: #ff0000">Failed</span>';
+            var status = (scenario.steps().filter(_ => _.isFailure()).length > 0) ? failed : passed;
+            return `${status} - Scenario #${index() + 1} - ${scenario.name()}`;
+        };
+
+        root.expandAll = function () {
+            $($('#tab-2').find('.ibox-content')).each(function (index, element) {
+                $($(element).prev().find('.collapse-link i').first()).attr('class', 'fa fa-chevron-down');
+                $(element).removeAttr('style');
+                $(element).addClass('in');
+            });
+        };
+
+        root.collapseAll = function () {
+            $($('#tab-2').find('.ibox-content')).each(function (index, element) {
+                $($(element).prev().find('.collapse-link i').first()).attr('class', 'fa fa-chevron-up');
+                $(element).removeAttr('style');
+                $(element).removeClass('in');
+            });
+        };
+
+        root.describeAction = function (step) {
+            if (step === undefined)
+                return null;
+
+            var passed = '<span style="color: #00cc00">Passed</span>';
+            var failed = '<span style="color: #ff0000">Failed</span>';
+            var status = (step.isFailure()) ? failed : passed;
+
+            if (step.action() === 'url')
+                return `${status} - Visit ${step.page()}`;
+            else if (step.action() === 'clearValue')
+                return `${status} - Clearing ${step.page()} > ${step.object()} field`
+            else if (step.action() === 'setValue')
+                return `${status} - Write ${step.testData()} to ${step.page()} > ${step.object()} field`
+            else if (step.action() === 'click')
+                return `${status} - Click ${step.page()} > ${step.object()} element`
+            else if (step.action() === 'moveToElement')
+                return `${status} - Move cursor to ${step.page()} > ${step.object()}`
+            else if (step.action() === 'waitForElementVisible')
+                return `${status} - Wait for visibility of ${step.page()} > ${step.object()}`
+            else if (step.action() === 'end')
+                return `${status} - Close browser browser`
+        };
+
+        root.describeAssertion = function (step, assertion) {
+            if (step === undefined)
+                return null;
+            if (assertion === undefined)
+                return null;
+
+            var passed = '<span style="color: #00cc00">Passed</span>';
+            var failed = '<span style="color: #ff0000">Failed</span>';
+            var status = (assertion.isFailure()) ? failed : passed;
+
+            if (assertion.assertion() === 'attributeContains')
+                return `${status} - Assert attribute ${assertion.attribute()} of ${step.page()} > ${assertion.element()} should contain ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'attributeEquals')
+                return `${status} - Assert attribute ${assertion.attribute()} of ${step.page()} > ${assertion.element()} should be equal to ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'containsText')
+                return `${status} - Assert ${step.page()} > ${assertion.element()} if contains ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'cssClassPresent')
+                return `${status} - Assert class of ${step.page()} > ${assertion.element()} should contain ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'cssClassNotPresent')
+                return `${status} - Assert class of ${step.page()} > ${assertion.element()} should not contain ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'cssProperty')
+                return `${status} - Assert CSS ${step.attribute()} of ${step.page()} > ${assertion.element()} should be ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'elementPresent')
+                return `${status} - Assert ${step.page()} > ${assertion.element()} should be present ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'elementNotPresent')
+                return `${status} - Assert ${step.page()} > ${assertion.element()} should not be present ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'hidden')
+                return `${status} - Assert ${step.page()} > ${assertion.element()} should not be hidden ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'visible')
+                return `${status} - Assert ${step.page()} > ${assertion.element()} should not be visible ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'title')
+                return `${status} - Assert title of page should be ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'urlContains')
+                return `${status} - Assert current url should contain ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+            else if (assertion.assertion() === 'urlEquals')
+                return `${status} - Assert current url should equal ${assertion.expected()} ${(assertion.message()) ? ' : ' + assertion.message() : ''}`
+        };
+
+        // #########################################
+        // AJAX REQUESTS - API REQUESTS
+        // #########################################
+
+        // #########################################
+        // INITIALIZATION
+        // #########################################
+
+        // mapping condition for converting json to viewmodel data
+        var mapping = {
+            // view model observable named - pagedScripts
+            'testresult': {
+                // create objects using Script model
+                create: function (options) {
+                    return new TestResult(options.data);
+                }
+            }
+        };
+
+        // foreach scripts from result, convert into script model and pass to pagedscript observableArray, in root (this) viewmodel
+        ko.mapping.fromJS({ testresult: <%- JSON.stringify(testresult) %> }, mapping, root);
+
+        // #########################################
+        // BINDING HANDLERS
+        // #########################################
+
+        ko.bindingHandlers.statsChart = {
+            update: function (element, valueAccessor) {
+                new Chart($(element), {
+                    type: 'pie',
+                    data: {
+                        labels: [
+                            'Passed',
+                            'Failed',
+                            'Warning'
+                        ],
+                        datasets: [
+                            {
+                                data: [
+                                    root.testresult().totalPassed(),
+                                    root.testresult().totalFailed(),
+                                    root.testresult().totalWarning()
+                                ],
+                                backgroundColor: [
+                                    "#02C902",
+                                    "#C70102",
+                                    "#F8CB02"
+                                ],
+                                hoverBackgroundColor: [
+                                    "#02F602",
+                                    "#F80102",
+                                    "#F8F502"
+                                ]
+                            }
+                        ]
+                    }
+                })
+            }
+        };
+
+        ko.bindingHandlers.returnAction = {
+            init: function (element, valueAccessor) {
+                $(element).keydown(function (e) { // listen to keydown (keyboard press) event
+                    if (e.which === 13) { // if user pressed 'enter' 
+                        var observable = valueAccessor(); // get observable from valueAccessor
+                        observable(); // trigger observable
+                    }
+                });
+            }
+        };
+    };
+
+    // #########################################
+    // APPLY BINDINGS :)
+    // #########################################
+    ko.applyBindings(new ViewTestResults(), document.getElementById('wrapper-content'));
+
+</script>

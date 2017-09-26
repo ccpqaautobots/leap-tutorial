@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <% include ../partials/shared/head %>
+</head>
+
+<body class="hold-transition skin-blue sidebar-mini">
+    <div class="wrapper">
+
+        <% include ../partials/shared/header %>
+
+        <!-- Content Wrapper. Contains page content -->
+        <div class="content-wrapper">
+            <!-- Content Header (Page header) -->
+            <section class="content-header">
+                <!-- Main content -->
+                <section class="content">
+
+                    <div class="container-fluid">
+                        <!-- Main row -->
+                        <div id="content" class="row">
+                            <h3>
+                                <a data-bind="attr: { href: '/plans/' + plan()._id }, text: plan().project"></a>
+                            </h3>
+                            <h3>
+                                <a data-bind="attr: { href: '/plans/' + plan()._id }, text: plan().name"></a>
+                            </h3>
+                            <p data-bind="text: plan().description"></p>
+                            <canvas id="buildDurationBar" width="400" height="400"></canvas>
+                            <canvas id="passingRatio" width="400" height="400"></canvas>
+                        </div>
+                    </div>
+                    <!-- /.row -->
+        </div>
+
+        </section>
+        <!-- /.content -->
+    </div>
+    <!-- /.content-wrapper -->
+
+    <!-- ChartJS 1.0.1 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.1.4/Chart.bundle.min.js"></script>
+    <!-- Page View Model -->
+    <script type="text/javascript">
+        function PlanViewModel(plan) {
+            var _this = this;
+
+            _this.plan = ko.observable(plan);
+            var pr_ctx = $("#passingRatio");
+            var passingRatio = new Chart(pr_ctx, {
+                type: 'pie',
+                data: {
+                    labels: [
+                        'Passed',
+                        'Failed'
+                    ],
+                    datasets: [
+                        {
+                            data: [plan.passed, plan.failed],
+                            backgroundColor: [
+                                "#00e600",
+                                "#ff1a1a"
+                            ],
+                            hoverBackgroundColor: [
+                                "#66ff66",
+                                "#ff6666"
+                            ]
+                        }
+                    ]
+                }
+            });
+
+            var buildDurations = plan.builds.map(function (x) { return x.duration });
+            var buildNos = plan.builds.map(function (x) { return x.buildNo });
+            var bdb_ctx = $("#buildDurationBar");
+            var buildDurationBar = new Chart(bdb_ctx, {
+                type: 'bar',
+                data: {
+                    labels: buildNos.reverse(),
+                    datasets: [
+                        {
+                            label: "Build Runtime",
+                            borderWidth: 1,
+                            data: buildDurations.reverse()
+                        }
+                    ]
+                },
+                options: {
+                    legend: {
+                        display: false
+                    },
+                    scales: {
+                        xAxes: [{
+                            display: true
+                        }],
+                        yAxes: [{
+                            display: true
+                        }]
+                    }
+                }
+            });
+        };
+
+        if (<%- JSON.stringify(plan) %> != null) {
+            ko.applyBindings(new PlanViewModel(<%- JSON.stringify(plan) %>));
+        }
+    </script>
+<!-- Page View Model End -->
+
+<footer class="main-footer">
+    <div class="pull-right hidden-xs">
+        <b>Version</b> 2.3.7
+    </div>
+    <strong>Copyright &copy; 2014-2016 <a href="http://almsaeedstudio.com">Almsaeed Studio</a>.</strong> All rights reserved.
+</footer>
+
+<!-- Control Sidebar -->
+<% include ../partials/shared/controlsidebar %>
+    <!-- /.control-sidebar -->
+
+    <!-- Add the sidebar's background. This div must be placed
+       immediately after the control sidebar -->
+    <div class="control-sidebar-bg"></div>
+    </div>
+    <!-- ./wrapper -->
+    <% include ../partials/shared/scripts %>
+        </body>
+
+        </html>

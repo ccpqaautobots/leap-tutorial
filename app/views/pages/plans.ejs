@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <% include ../partials/shared/head %>
+</head>
+
+<body class="hold-transition skin-blue sidebar-mini">
+    <div class="wrapper">
+
+        <% include ../partials/shared/header %>
+
+        <!-- Content Wrapper. Contains page content -->
+        <div class="content-wrapper">
+            <!-- Content Header (Page header) -->
+            <section class="content-header">
+                <!-- Main content -->
+                <section class="content">
+
+                    <div class="container-fluid">
+                        <!-- Main row -->
+                        <div id="content" class="row">
+                            <div class="col-xs-12">
+                                <div class="box">
+                                    <div class="box-header">
+                                        <h3 class="box-title">Tests results</h3>
+                                    </div>
+                                    <!-- /.box-header -->
+                                    <div class="box-body table-responsive no-padding">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <th>Plan</th>
+                                                <th>Description</th>
+                                                <th>Project</th>
+                                                <th>Duration</th>
+                                                <th>Running</th>
+                                            </thead>
+                                            <tbody data-bind="foreach: plans">
+                                                <tr>
+                                                    <td>
+                                                        <a data-bind="attr: { href: $data.href}, text: $data.name"></p>
+                                                    </td>
+                                                    <td>
+                                                        <p data-bind="text: $data.description"></p>
+                                                    </td>
+                                                    <td>
+                                                        <p data-bind="text: $data.project"></p>
+                                                    </td>
+                                                    <td>
+                                                        <p data-bind="text: $data.duration"></p>
+                                                    </td>
+                                                    <td>
+                                                        <p data-bind="text: $data.running"></p>
+                                                    </td>
+                                                    <td>
+                                                        <div class="box-tools">
+                                                            <div class="box-tools">
+                                                                <button class="btn btn-box-tool" data-bind="click: $root.run.bind($data)" data-toggle="tooltip" title="Run"><i class="fa fa-play"></i></button>
+                                                            </div>
+                                                            <!-- /.box-tools -->
+                                                        </div>
+                                                    </td>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <!-- /.box-body -->
+                                </div>
+                                <!-- /.box -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /.row -->
+        </div>
+
+        </section>
+        <!-- /.content -->
+    </div>
+    <!-- /.content-wrapper -->
+
+    <!-- Page View Model -->
+    <script type="text/javascript">
+        function PlanViewModel(plans) {
+            var _this = this;
+
+            _this.plans = ko.observableArray([]);
+
+            if (plans) {
+                plans.forEach(function(plan) {
+                    _this.plans.push({
+                        _id: ko.observable(plan._id),
+                        name: ko.observable(plan.name),
+                        description: ko.observable(plan.description),
+                        project: ko.observable(plan.project),
+                        duration: ko.observable(plan.duration),
+                        running: ko.observable(plan.running),
+                        href: ko.computed(function() {
+                            return '/plans/' + plan.project + '/' + plan._id;
+                        }, this)
+                    });
+                })
+            } else {
+                $.ajax({
+                    type: "GET",
+                    url: `/api/plans`,
+                    success: function (result) {
+                        result.forEach(function (plan) {
+                            _this.plans.push({
+                                _id: ko.observable(plan._id),
+                                name: ko.observable(plan.name),
+                                description: ko.observable(plan.description),
+                                project: ko.observable(plan.project),
+                                duration: ko.observable(plan.duration),
+                                running: ko.observable(plan.running),
+                                href: ko.computed(function() {
+                                    return '/plans/' + plan.project + '/' + plan._id;
+                                }, this)
+                            });
+                        });
+                    }
+                });
+            }
+
+            _this.run = function(data) {
+                $.ajax({
+                    type: "POST",
+                    url: `/api/plans/run`,
+                    data: { plan: ko.toJSON(data) },
+                    success: function (result) {
+                        _this.plans().filter(_ => _._id() == result._id)[0].running(true);
+                        var getPlanUpdates = setInterval(function() {
+                            $.ajax({
+                                type: "GET",
+                                url: "/api/plans?id=" + result._id,
+                                success: function(planStatus){
+                                    if (planStatus[0].running) {
+                                        console.log('Plan is still running ..');
+                                    } else {
+                                        console.log('Plan finished ..');
+                                        _this.plans().filter(_ => _._id() == result._id)[0].running(false);
+                                        _this.plans().filter(_ => _._id() == result._id)[0].duration(planStatus[0].duration);
+                                        clearInterval(getPlanUpdates);
+                                    }
+                                }
+                            });
+                        }, 5000);
+                    }
+                });
+            };
+        };
+
+        ko.applyBindings(new PlanViewModel(<%- JSON.stringify(plans) %>));
+    </script>
+<!-- Page View Model End -->
+
+<footer class="main-footer">
+    <div class="pull-right hidden-xs">
+        <b>Version</b> 2.3.7
+    </div>
+    <strong>Copyright &copy; 2014-2016 <a href="http://almsaeedstudio.com">Almsaeed Studio</a>.</strong> All rights reserved.
+</footer>
+
+<!-- Control Sidebar -->
+<% include ../partials/shared/controlsidebar %>
+    <!-- /.control-sidebar -->
+
+    <!-- Add the sidebar's background. This div must be placed
+       immediately after the control sidebar -->
+    <div class="control-sidebar-bg"></div>
+    </div>
+    <!-- ./wrapper -->
+    <% include ../partials/shared/scripts %>
+        </body>
+
+        </html>

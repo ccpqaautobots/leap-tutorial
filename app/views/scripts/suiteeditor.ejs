@@ -1,0 +1,718 @@
+<!-- Select2 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
+<script type="text/javascript">
+    var _token = '<%= user.token %>';
+    var _existingSuite = <%- JSON.stringify(existingSuite) %>;
+    var _query = <%- JSON.stringify(query) %>;
+    var _projects = <%- JSON.stringify(projects) %>;
+    var _project = <%- JSON.stringify(project) %>;
+    var _author = <%- JSON.stringify(user.fullname) %>;
+    Array.prototype.contains = function (v) {
+        for (var i = 0; i < this.length; i++) {
+            if (this[i] === v) return true;
+        }
+        return false;
+    };
+
+    Array.prototype.unique = function () {
+        var arr = [];
+        for (var i = 0; i < this.length; i++) {
+            if (!arr.contains(this[i])) {
+                arr.push(this[i]);
+            }
+        }
+        return arr;
+    }
+
+    function SuiteEditorViewModel(existingSuite) {
+        var root = this;
+
+        // #########################################
+        // MODELS - FOR EASY DATA MANIPULATION
+        // #########################################
+
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, title || 'Suite Editor');
+            }, 500);
+        }
+
+        // suite model
+        function Suite(suite, isNew) {
+            var _suite = this;
+
+            _suite._id = ko.observable((suite) ? suite._id || undefined : undefined);
+            _suite.project = ko.observable((suite) ? suite.project || undefined : (isNew) ? _project.projectKey || undefined : undefined);
+            _suite.projectName = ko.observable((suite) ? suite.projectName || undefined : (isNew) ? _project.name || undefined : undefined);
+            _suite.suiteName = ko.observable((suite) ? suite.suiteName || undefined : undefined);
+            _suite.author = ko.observable((suite) ? suite.author || undefined : (isNew) ? _author || undefined : undefined);
+            _suite.status = ko.observable((suite) ? suite.status || undefined : undefined);
+            _suite.lastUpdatedBy = ko.observable((suite) ? suite.lastUpdatedBy || undefined : undefined);
+            _suite.createdDate = ko.observable((suite) ? suite.createdDate || undefined : undefined);
+            _suite.updatedDate = ko.observable((suite) ? suite.updatedDate || undefined : undefined);
+            _suite.module = ko.observable((suite) ? suite.module || undefined : undefined);
+            _suite.cycle = ko.observable((suite) ? suite.cycle || undefined : undefined);
+            _suite.scripts = ko.observableArray([]);
+
+            _suite.scripts.subscribe(function (newValue) {
+                if (_suite.scripts().length > 0)
+                    root.enableSuiteSetup(true);
+                else
+                    root.enableSuiteSetup(false);
+            });
+
+            if (suite && suite.scripts) {
+                var mapping = {
+                    'scripts': {
+                        create: function (options) {
+                            var filtered = root.pagedScripts().filter(_ => _.id() == options.data.scriptId);
+                            return new Script(ko.toJS(filtered[0]), options.data);
+                        }
+                    }
+                }
+
+                var scriptsCleanup = [];
+                suite.scripts.forEach(function (script, index) {
+                    if (root.pagedScripts().some(_ => _.id() == script.scriptId)) {
+                        // remove console log, for debugging purposes
+                        console.log('pushing existing script: ' + script.scriptId);
+                        scriptsCleanup.push(suite.scripts[index]);
+                    } else {
+                        // remove else condition, for debugging purposes
+                        console.log('ignoring non existing script: ' + script.scriptId);
+                    }
+                });
+
+                var mappingData = { scripts: scriptsCleanup };
+                ko.mapping.fromJS(mappingData, mapping, _suite);
+            };
+
+            root.selectedStatus(root.statuses().filter(_ => _.value == _suite.status())[0]);
+        };
+
+        // script model
+        function Script(script, suiteScript) {
+            var _script = this;
+
+            // script properties
+            _script.id = ko.observable((script) ? script._id || script.id : undefined);
+            _script.disabled = ko.observable((script) ? script.disabled || false : false);
+            _script.project = ko.observable((script) ? script.project || undefined : undefined);
+            _script.projectName = ko.observable((script) ? script.projectName || undefined : undefined);
+            _script.module = ko.observable((script) ? script.module || undefined : undefined);
+            _script.testName = ko.observable((script) ? script.testName || undefined : undefined);
+            _script.author = ko.observable((script) ? script.author || undefined : undefined);
+            _script.status = ko.observable((script) ? script.status || undefined : undefined);
+            _script.createdDate = ko.observable((script) ? script.createdDate || undefined : undefined);
+            _script.updatedDate = ko.observable((script) ? script.updatedDate || undefined : undefined);
+            _script.cycle = ko.observableArray((script) ? (script.cycle) ? script.cycle.map(x => { return x }) : [] : []);
+
+
+            // suite script properties
+            _script._id = ko.observable((suiteScript) ? suiteScript._id || undefined : undefined);
+            _script.scriptId = ko.observable((suiteScript) ? suiteScript.scriptId || _script._id : (script) ? script._id : undefined);
+            _script.disabled = ko.observable((suiteScript) ? suiteScript.disabled || false : false);
+            _script.missing = ko.computed(function () {
+                return _script.id() == undefined;
+            });
+
+            // adds itself to selected scripts
+            _script.addToSuite = function () {
+                root.mySuite().scripts.push(_script);
+                root.registerChange();
+            };
+
+            _script.removeFromSuite = function () {
+                root.mySuite().scripts.splice(root.mySuite().scripts.indexOf(_script), 1);
+                root.registerChange();
+            };
+
+            _script.toggleDisabled = function () {
+                _script.disabled(!_script.disabled());
+                root.registerChange();
+            };
+        };
+
+        // #########################################
+        // UI VARIABLES - FOR FANCY UI EFFECTS (ex. loading)
+        // #########################################
+
+        root.isLoadingScripts = ko.observable(true);
+        root.enableSuiteSetup = ko.observable(false);
+        root.showTestResultsUrl = ko.observable(false);
+        root.isZeroResult = ko.observable(false);
+        root.editSuiteInfoText = ko.observable('Create Suite');
+        root.saveButton = ko.observable(false);
+
+        // #########################################
+        // DATA VARIABLES - USED FOR INTERFACE DATA PRESENTATION
+        // #########################################
+
+        // suite data
+        root.mySuite = ko.observable();
+
+        // defaults
+        root.statuses = ko.observableArray([
+            { name: 'Completed', value: 'Completed' },
+            { name: 'In-progress', value: 'In-progress' },
+            { name: 'Maintenance', value: 'Maintenance' }
+        ]);
+        root.selectedStatus = ko.observable();
+        root.selectedStatus.subscribe(function (newValue) {
+            if (root.mySuite())
+                root.mySuite().status(newValue.value);
+        });
+
+        // displayed data
+        root.pagedScripts = ko.observableArray(); // divides scripts by page
+        root.selectedScripts = ko.observableArray(); // selected scripts for running
+
+        // for searching
+        root.quickSearchCriteria = ko.observable('');
+        root.quickSearchFilter = ko.observable({ name: 'Test Name', value: 'testName' });
+        root.availableProjects = ko.observableArray();
+        root.availableAuthors = ko.observableArray();
+        root.availableCycles = ko.observableArray();
+
+        if (_query) {
+            if (_query.type && _query.type == 'edit'){
+                root.saveButton(true)
+                root.editSuiteInfoText('Edit Suite Info')
+            }
+        }
+
+        root.saveChangesButton = ko.observable(false);
+        root.registerChange = function () {
+            if (_query) {
+                if (_query.type && _query.type == 'edit'){
+                    root.saveChangesButton(true);
+                }                    
+            }
+        };
+
+        // #########################################
+        // FUNCTIONS - TRIGGER EVENTS
+        // #########################################
+
+        root.removeFromSelected = function (index) {
+            root.selectedScripts.splice(index(), 1); // remove from selected using index#
+        };
+        root.changeQuickSearch = function (data) {
+            root.quickSearchFilter(data); // updated selected quicksearch from selection
+        };
+        root.quickSearch = function () {
+            // quick search function
+            var query = {};
+            query.project = _project.projectKey;
+            // use quicksearch filter as object key (ex. { project: criteria })
+            query[root.quickSearchFilter().value] = {
+                $regex: root.quickSearchCriteria(),
+                $options: 'i'
+            };
+            root.searchScripts(query); // trigger ajax query scripts
+        };
+        root.aqSearchClear = function (clearQuickSearch) {
+            // clear advance and/or quick search
+            $('select.aSearchSelect2').each(function (index, element) {
+                $(element).select2("val", ""); // foreach select2 element in ui - set value to empty
+            });
+            // clear filter observables
+            root.aSearchModule('');
+            root.aSearchScript('');
+            root.aSearchCycle([]);
+            root.aSearchAuthor([]);
+            root.aSearchStatus([]);
+            root.aSearchCreatedDate(undefined);
+            root.aSearchUpdatedDate(undefined);
+            root.createdSelectedRange(undefined);
+
+            if (clearQuickSearch) { // optional - clear quicksearch (boolean)
+                root.quickSearchCriteria('');
+                root.searchScripts();
+            }
+        };
+
+        root.suiteSetup = function () {
+            $('#suite-info-modal').modal('show');
+        };
+        root.resetSuiteSetupModal = function () {
+            root.host('');
+            root.os(root.osList()[0]);
+            root.browser(root.browserList()[0]);
+            root.browserVersion(root.browserVersionList()[0]);
+            root.browserResolution(root.browserResolutionList()[0]);
+            root.testMode(root.testModeList()[0]);
+        };
+        root.clearSuiteScripts = function () {
+            root.mySuite().scripts([]);
+        };
+
+        root.editConfirm = ko.observable(true);
+        root.saveSuiteConfirmation = function () {
+            $('#suite-info-modal').modal('hide');
+            if (_query) {
+                if (_query.type && _query.type == 'edit' && root.editConfirm()){
+                    $('#edit-confirmation-modal').modal('show');
+                    root.editConfirm(false);
+                    return;
+                }
+            }
+            if (!root.mySuite().module() ||
+                root.mySuite().cycle().length == 0) {
+                $('#save-confirmation-modal').modal('show');
+            } else {
+                root.saveSuite();
+            }
+        };
+
+        root.saveSuite = function () {
+            var oldUpdatedDate = root.mySuite().updatedDate();
+            var oldLastUpdatedBy = root.mySuite().lastUpdatedBy();
+            root.mySuite().lastUpdatedBy(_author);
+            root.mySuite().updatedDate(new Date());
+            if (_query) {
+                if (_query.type && _query.type == 'edit') {
+                    $.ajax({
+                        type: 'PUT',
+                        url: '/api/suites',
+                        data: ko.toJSON(root.mySuite),
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        success: function (result) {
+                            if (result.success) {
+                                root.mySuite()._id(result._id);
+                                toastrTrigger(result.message);
+                                root.saveChangesButton(false);
+                                root.editConfirm(true);
+                                setTimeout(function () {
+                                    $('#suite-info-modal').modal('hide');
+                                }, 1000);
+                            } else {
+                                root.mySuite().lastUpdatedBy(oldLastUpdatedBy);
+                                root.mySuite().updatedDate(oldUpdatedDate);
+                                toastrTrigger(result.message, undefined, 'error');
+                            }
+                        }
+                    });
+                    return;
+                }
+            }
+
+            $.ajax({
+                type: 'POST',
+                url: '/api/suites',
+                data: ko.toJSON(root.mySuite),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    if (result.success) {
+                        root.mySuite()._id(result._id);
+                        toastrTrigger(result.message);
+                        setTimeout(function () {
+                            window.location.href = '../suiterepository/' + _project.projectKey
+                        }, 3000);
+                    } else {
+                        root.mySuite().lastUpdatedBy(oldLastUpdatedBy);
+                        root.mySuite().updatedDate(oldUpdatedDate);
+                        toastrTrigger(result.message, undefined, 'error');
+                    }
+                },
+                failed: function (result) {
+
+                }
+            });
+        };
+
+        // #########################################
+        // AJAX REQUESTS - API REQUESTS
+        // #########################################
+
+        root.searchScripts = function (query, options, initialize) {
+            root.isLoadingScripts(true); // trigger loading
+            // post request - pass query object & options
+            $.ajax({
+                type: 'POST',
+                url: '/api/getScripts',
+                data: JSON.stringify({ query: query || {}, options: options }),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    // mapping condition for converting json to viewmodel data
+                    var mapping = {
+                        // view model observable named - pagedScripts
+                        'pagedScripts': {
+                            // create objects using Script model
+                            create: function (options) {
+                                return new Script(options.data);
+                            }
+                        }
+                    };
+
+                    // foreach scripts from result, convert into script model and pass to pagedscript observableArray, in root (this) viewmodel
+                    ko.mapping.fromJS({ pagedScripts: result }, mapping, root);
+
+                    // if initialization
+                    if (initialize) {
+                        root.availableAuthors(result.map(function (item) { return item.author }).unique()); // get unique authors from result
+                        var cycles = result.map(function (item) { return item.cycle });
+                        var merged = [].concat.apply([], cycles);
+                        root.availableCycles([...new Set(merged.filter(_ => _ != undefined))]);
+                        if (existingSuite)
+                            root.mySuite(new Suite(existingSuite));
+                        else
+                            root.mySuite(new Suite(undefined, true));
+
+                        if (_query)
+                            if (_query.type && (_query.type == 'edit' || _query.type == 'clone')) {
+                                root.enableSuiteSetup(true);
+                                if (_query.type == 'clone')
+                                    root.mySuite().createdDate(undefined);
+                            }
+                        //root.resetRunSetup();
+                    }
+
+                    if (!initialize)
+                        if (result.length > 0) {
+                            root.isZeroResult(false);
+                            $('#advance-search-modal').modal('hide');
+                        } else {
+                            root.isZeroResult(true);
+                        }
+
+                    root.isLoadingScripts(false); // stop loading
+                }
+            });
+        };
+
+        // #########################################
+        // INITIALIZATION
+        // #########################################
+
+        root.searchScripts({ project: _project.projectKey }, null, true); // empty query, empty options, initialization = true
+
+        // #########################################
+        // BINDING HANDLERS
+        // #########################################
+
+        ko.bindingHandlers.validateSuiteForm = {
+            init: function (element, valueAccessor) {
+                $(element).validate({
+                    errorClass: 'error jquery-invalid',
+                    rules: {
+                        suitename: {
+                            required: true
+                        }
+                    }
+                })
+            }
+        };
+
+        ko.bindingHandlers.suiteInfoForm = {
+            init: function (element, valueAccessor) {
+                $(element).submit(function (event) {
+                    event.preventDefault();
+
+                    if ($(element).valid()) {
+                        root.saveSuiteConfirmation();
+                    }
+                });
+            }
+        };
+
+        ko.bindingHandlers.filterForm = {
+            init: function (element, valueAccessor) {
+                // observables used for advanced search
+                root.aSearchModule = ko.observable('');
+                root.aSearchScript = ko.observable('');
+                root.aSearchCycle = ko.observableArray();
+                root.aSearchAuthor = ko.observableArray();
+                root.aSearchStatus = ko.observableArray();
+                root.aSearchCreatedDate = ko.observable();
+                root.aSearchUpdatedDate = ko.observable();
+
+                // extract data from array observable
+                function extract(key, array) {
+                    if (array.length > 0) { // if array is greater than 0
+                        var q = { $or: [] }; // create query $or condition
+                        array.forEach(function (criteria) {
+                            q.$or.push({ [key]: criteria }); // pass criteria
+                        })
+                        return q;
+                    }
+                    return null;
+
+                    // this functions generates query (ex.)
+                    // $or: [
+                    //  { project: 'new project' },
+                    //  { project: 'old project' }    
+                    // ]
+                };
+
+                function extractDate(key, dateRange) {
+                    if (!dateRange)
+                        return null;
+
+                    if (dateRange.includes('~')) {
+                        var ranges = dateRange.split('~');
+                        var first = ranges.shift();
+                        var last = ranges.pop();
+
+                        return { [key]: { $gt: first, $lt: last } };
+                    }
+                }
+
+                // when form is submitted
+                $(element).submit(function (event) {
+                    event.preventDefault(); // prevent page refresh
+                    var query = {}; // query to be filled by conditions
+
+                    $and = []; // and condition
+
+                    $and.push({ project: _project.projectKey });
+
+                    if (root.aSearchModule() != '') {
+                        $and.push({ module: { $regex: root.aSearchModule(), $options: 'i' } });
+                    }
+
+                    if (root.aSearchScript() != '') { // generate regular expression query for script name if any
+                        $and.push({ testName: { $regex: root.aSearchScript(), $options: 'i' } });
+                    }
+
+                    var cycleQ = extract('cycle', root.aSearchCycle());
+                    if (cycleQ) $and.push(cycleQ);
+
+                    var authorQ = extract('author', root.aSearchAuthor());
+                    if (authorQ) $and.push(authorQ); // generate $or query for author if any
+
+                    var statusQ = extract('status', root.aSearchStatus());
+                    if (statusQ) $and.push(statusQ); // generate $or query for status if any
+
+                    var createdQ = extractDate('createdDate', root.aSearchCreatedDate());
+                    if (createdQ) $and.push(createdQ);
+
+                    var updatedQ = extractDate('updatedDate', root.aSearchUpdatedDate());
+                    if (updatedQ) $and.push(updatedQ);
+
+                    if ($and.length > 0) query = { $and: $and }; // if $and condition contains a condition, push to query
+
+                    root.searchScripts(query); // trigger query search & pass query
+                })
+            }
+        };
+
+        ko.bindingHandlers.select2 = {
+            init: function (element, valueAccessor) {
+                var accessors = ko.unwrap(valueAccessor()); // variables passed from databinding
+                $(element).select2({
+                    placeholder: accessors.placeholder // placeholder from valueAccessor
+                }).on('change', function (event) { // if changed happened on select2
+                    if (event.added) // if change is adding
+                        accessors.observable.push(event.added.text); // add selected to observable from valueAccessor
+                    if (event.removed) // if change is removing
+                        accessors.observable.splice(accessors.observable().indexOf(event.removed.text), 1); // remove selected to observable from valueAccessor
+                });
+            }
+        };
+
+        ko.bindingHandlers.select2Tags = {
+            init: function (element, valueAccessor) {
+                var accessors = ko.unwrap(valueAccessor());
+                $(element).val(accessors.observable().join(','));
+                $(element).select2({
+                    placeholder: accessors.placeholder,
+                    tags: []
+                }).on('change', function (event) {
+                    if (event.added) // if change is adding
+                        accessors.observable.push(event.added.text); // add selected to observable from valueAccessor
+                    if (event.removed) // if change is removing
+                        accessors.observable.splice(accessors.observable().indexOf(event.removed.text), 1); // remove selected to observable from valueAccessor
+                });
+            }
+        };
+
+        root.createdSelectedRange = ko.observable();
+        root.createdSelectedDate = ko.observable();
+        root.updatedDateRanges = ko.computed(function () {
+            var obj = {
+                'Today': [moment(), moment()],
+                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                'This Month': [moment().startOf('month'), moment().endOf('month')],
+                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+            };
+
+            if (root.createdSelectedRange() == 'Today') {
+                return obj = {
+                    'Today': [moment(), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Yesterday') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 7 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 30 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                    'Last 30 Days': [moment().subtract(29, 'days'), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last Month') {
+                return obj = {
+                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'This Month') {
+                return obj = {
+                    'This Month': [moment().startOf('month'), moment().endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Custom Range') {
+                return obj = {};
+            }
+
+            return obj;
+        });
+
+        ko.bindingHandlers.datePicker = {
+            init: function (element, valueAccessor) {
+                $(element).daterangepicker({
+                    locale: {
+                        cancelLabel: 'Clear'
+                    },
+                    ranges: {
+                        'Today': [moment(), moment()],
+                        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                        'This Month': [moment().startOf('month'), moment().endOf('month')],
+                        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                    },
+                    drops: 'down',
+                    opens: 'center',
+                    minDate: '01/01/2017',
+                    maxDate: moment()
+                });
+
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+
+                $(element).on('apply.daterangepicker', function (event, picker) {
+                    if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                        $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")}`);
+                    } else {
+                        $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                    }
+
+                    if (pickerType == 'Created') {
+                        if (picker.chosenLabel == 'Custom Range')
+                            root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                        root.createdSelectedRange(picker.chosenLabel);
+                        root.aSearchUpdatedDate(undefined);
+                    }
+
+                    root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                });
+
+                $(element).on('cancel.daterangepicker', function (event, picker) {
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                    root[observable](undefined);
+                });
+            },
+            update: function (element, valueAccessor) {
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+                if (!root[observable]())
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+
+                if (pickerType == 'Updated') {
+                    var min;
+                    var max;
+                    if (root.createdSelectedRange() == 'Custom Range') {
+                        var range = root.createdSelectedDate().split('~');
+                        min = range.shift();
+                        max = range.pop();
+                    }
+                    $(element).daterangepicker({
+                        locale: {
+                            cancelLabel: 'Clear'
+                        },
+                        ranges: root.updatedDateRanges(),
+                        drops: 'down',
+                        opens: 'center',
+                        minDate: (min) ? moment(min) : '01/01/2017',
+                        maxDate: (max) ? moment(max) : moment()
+                    });
+
+                    var pickerType = $(element).data('picker-date');
+                    var observable = $(element).data('picker-observable');
+
+                    $(element).on('apply.daterangepicker', function (event, picker) {
+                        if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                            $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")}`);
+                        } else {
+                            $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                        }
+
+                        if (pickerType == 'Created') {
+                            if (picker.chosenLabel == 'Custom Range')
+                                root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                            root.createdSelectedRange(picker.chosenLabel);
+                            root.aSearchUpdatedDate(undefined);
+                        }
+
+                        root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                    });
+
+                    $(element).on('cancel.daterangepicker', function (event, picker) {
+                        $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                        root[observable](undefined);
+                    });
+                }
+            }
+        };
+
+        ko.bindingHandlers.returnAction = {
+            init: function (element, valueAccessor) {
+                $(element).keydown(function (e) { // listen to keydown (keyboard press) event
+                    if (e.which === 13) { // if user pressed 'enter' 
+                        var observable = valueAccessor(); // get observable from valueAccessor
+                        observable(); // trigger observable
+                    }
+                });
+            }
+        };
+    };
+
+    // #########################################
+    // APPLY BINDINGS :)
+    // #########################################
+    if (typeof _existingSuite === 'object')
+        ko.applyBindings(new SuiteEditorViewModel(_existingSuite), document.getElementById('wrapper-content'));
+    else
+        ko.applyBindings(new SuiteEditorViewModel(), document.getElementById('wrapper-content'));
+
+</script>

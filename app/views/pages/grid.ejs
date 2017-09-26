@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <% include ../partials/shared/head %>
+</head>
+
+<body class="hold-transition skin-blue sidebar-mini">
+    <div class="wrapper">
+
+        <% include ../partials/shared/header %>
+
+        <!-- Content Wrapper. Contains page content -->
+        <div class="content-wrapper">
+            <!-- Content Header (Page header) -->
+            <section class="content-header">
+                <div data-bind="foreach: grids">
+                    <p data-bind="text: JSON.stringify($data.hub)"></p>
+                    <p data-bind="text: JSON.stringify($data.node)"></p>
+                    <button data-bind="click: $root.launchGrid.bind($data)">Launch</button>
+                </div>
+            </section>
+            <!-- /.content -->
+        </div>
+        <!-- /.content-wrapper -->
+
+        <!-- Page View Model -->
+        <script type="text/javascript">
+            function SeleniumGridViewModel() {
+                var _this = this;
+
+                _this.grids = ko.observableArray();
+
+                var HubModel = function() {
+                    var self = this;
+
+                    self = {
+                        host: null,
+                        port: 4444,
+                        newSessionWaitTimeout: -1,
+                        servlets: [],
+                        prioritizer: null,
+                        capabilityMatcher: 'org.openqa.grid.internal.utils.DefaultCapabilityMatcher',
+                        throwOnCapabilityNotPresent: true,
+                        nodePolling: 5000,
+                        cleanUpCycle: 5000,
+                        timeout: 300000,
+                        browserTimeout: 0,
+                        maxSession: 5,
+                        jettyMaxThreads: -1
+                    };
+
+                    return self;
+                };
+
+                var NodeModel = function() {
+                    var self = this;
+
+                    self.capabilities = [
+                        {
+                            browser: 'firefox',
+                            maxInstances: 5,
+                            seleniumProtocol: 'WebDriver'
+                        },
+                        {
+                            browser: 'chrome',
+                            maxInstances: 5,
+                            seleniumProtocol: 'WebDriver',
+                            'webdriver.chrome.driver': 'C:\Users\kcid\Desktop\leap2\grid\chromedriver.exe'
+                        },
+                        {
+                            browser: 'internet explorer',
+                            maxInstances: 5,
+                            seleniumProtocol: 'WebDriver'
+                        }
+                    ]
+
+                    self.configuration = {
+                        proxy: 'org.openqa.grid.selenium.proxy.DefaultRemoteProxy',
+                        maxSession: 5,
+                        port: 5555,
+                        host: '127.0.0.1',
+                        register: true,
+                        registerCycle: 5000,
+                        hubPort: 4444,
+                        hubHost: '127.0.0.1'
+                    };
+
+                    return self;
+                };
+
+                var GridModel = function(hub, node) {
+                    var self = this;
+
+                    self = {
+                        hub: hub || new HubModel,
+                        node: node || new NodeModel
+                    }
+
+                    return self;
+                };
+
+                _this.launchGrid = function(grid) {
+                    console.log(JSON.stringify(grid));
+                    $.ajax({
+                        type: "POST",
+                        url: "/api/grid/start",
+                        data: $.param({ grid: JSON.stringify(grid) }, true),
+                        success: function(result){
+                            console.log(result);
+                        }
+                    });
+                };
+
+                _this.grids.push(new GridModel());
+            };
+
+            ko.applyBindings(new SeleniumGridViewModel());
+        </script>
+<!-- Page View Model End -->
+
+<footer class="main-footer">
+    <div class="pull-right hidden-xs">
+        <b>Version</b> 2.3.7
+    </div>
+    <strong>Copyright &copy; 2014-2016 <a href="http://almsaeedstudio.com">Almsaeed Studio</a>.</strong> All rights reserved.
+</footer>
+
+<!-- Control Sidebar -->
+<% include ../partials/shared/controlsidebar %>
+    <!-- /.control-sidebar -->
+
+    <!-- Add the sidebar's background. This div must be placed
+       immediately after the control sidebar -->
+    <div class="control-sidebar-bg"></div>
+    </div>
+    <!-- ./wrapper -->
+    <% include ../partials/shared/scripts %>
+        </body>
+
+        </html>

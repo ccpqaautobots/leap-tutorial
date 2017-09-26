@@ -1,0 +1,18 @@
+<script>
+    // Legacy browser support - trimming strings
+    if (!String.prototype.trimFull) {
+            String.prototype.trimFull = function () { 
+                return this.replace(/\s+/g, ' ')
+                           .replace(/^\s+|\s+$/g, ''); };
+    }
+
+    // Observable extensions
+    ko.extenders.trimmed = function (target, option) {
+        return ko.computed({
+            read: target,
+            write: function (newValue) {
+                (newValue.trimFull() == '') ? target(undefined) : target(newValue.trimFull());
+            }
+        }).extend({ notify: 'always' });
+    }
+</script>

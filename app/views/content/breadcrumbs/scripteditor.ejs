@@ -1,0 +1,53 @@
+</script>
+<div class="row wrapper border-bottom white-bg page-heading">
+    <div class="col-lg-10" id="breadcrumb">
+        <h2>Script Editor</h2>
+        <ol class="breadcrumb" data-bind="if: $root.hasQuery()">
+            <li>
+                <a href="/">Home</a>
+            </li>
+            <li>
+                <a href="/repositories">Repositories</a>
+            </li>
+            <li>
+                <a data-bind="text: $root.projectName() + ' Scripts', attr: {href: '/scriptsrepository/' + $root.project()}"></a>
+            </li>
+            <li class="active">
+                <strong>Script Editor</strong>
+            </li>
+        </ol>
+        <ol class="breadcrumb" data-bind="if: !($root.hasQuery())">
+            <li>
+                <a href="/">Home</a>
+            </li>
+            <li>
+                <a href="/repositories">Repositories</a>
+            </li>
+            <li class="active">
+                <strong>Script Editor</strong>
+            </li>
+        </ol>
+    </div>
+    <div class="col-lg-2"></div>
+</div>
+<script type="text/javascript">
+    var _projects = <%- JSON.stringify(projects) %>;
+    var _query = <%- JSON.stringify(query) %>;
+
+    function viewModel(projects, query){
+        var root = this;
+        root.projects = ko.observableArray(projects);
+        root.projectName = ko.observable();
+        root.project = ko.observable(query.project);
+        root.hasQuery = ko.observable();
+        (query.project) ? root.hasQuery(true) : root.hasQuery(false); 
+        
+        root.projects().forEach(function(proj){
+                if (query.project == proj.projectKey)
+                    return root.projectName(proj.name);
+        });
+    }
+
+    ko.applyBindings(new viewModel(_projects, _query), document.getElementById("breadcrumb"));
+
+</script>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<% include ../partials/shared/head %>
+</head>
+
+<body class="gray-bg">
+
+	<i id="trello-trigger" data-target="#trello-modal" class="fa fa-trello fa-2x pull-right" style="color: #595959; cursor: pointer; margin: 30px 30px 0 0;"></i>
+
+	<div class="lock-word animated fadeInDown">
+		<span class="first-word">LOCKED</span><span>SCREEN</span>
+	</div>
+	<div class="middle-box text-center lockscreen animated fadeInDown">
+		<div>
+			<div class="m-b-md">
+				<img alt="image" class="img-circle" src="http://placehold.it/140/f0f0f1/f0f0f1?text=%20">
+			</div>
+			<h3><%= user.fullname %></h3>
+			<form class="m-t" role="form" action="index.html">
+				<div class="form-group">
+					<input type="password" data-bind="value: password" class="form-control" placeholder="******" required="">
+				</div>
+				<button type="submit" data-bind="click: unlock" class="btn btn-primary block full-width">Unlock</button>
+			</form>
+		</div>
+	</div>
+	<script type="text/javascript">
+		function LockScreenViewModel() {
+			var _this = this;
+
+			_this.password = ko.observable();
+			_this.unlock = function () {
+				$.ajax({
+					type: "POST",
+					url: `/api/unlock`,
+					data: { pass: _this.password() },
+					success: function (result) {
+						if (result.status == 'unlocked')
+							window.location = '/';
+					}
+				});
+			}
+		};
+
+		ko.applyBindings(new LockScreenViewModel());
+	</script>
+
+	<% include ../partials/shared/trellomodal %>
+    <% include ../partials/shared/trelloscripts %>
+	<% include ../partials/shared/scripts %>
+</body>
+
+</html>

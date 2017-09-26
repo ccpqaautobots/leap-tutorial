@@ -1,0 +1,247 @@
+<script src="/js/plugins/masonry/masonry.pkgd.min.js"></script>
+<div class="grid">
+    <div class="row">
+        <div class="pull-right">
+            <div class="col-lg-12">
+                <button class="btn btn-default"><i class="fa fa-file-pdf-o"></i>&nbsp;Export as PDF</button>
+                <button class="btn btn-primary"><i class="fa fa-envelope-o"></i>&nbsp;Send via Outlook</button>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-lg-4" data-bind="template: { name: 'data-comparison', data: { _this: $root.today(), _that: $root.yesterday(), _extras: { _title: 'Today\'s Execution Summary', _comparedTo: 'Yesterday' } } }"></div>
+        <div class="col-lg-3" data-bind="template: { name: 'passing-rate-comparison', data: { _this: $root.thisWeek(), _that: $root.lastWeek(), _extras: { _comparisonType: 'Weekly', _comparedTo: 'Last Week' } } }"></div>
+        <div class="col-lg-5" data-bind="template: { name: 'simple-line-graph', data: { _legend: 'Passing', _labels: $root.thisMonthDaily().map(_ => _.day), _data: $root.thisMonthDaily().map(_ => parseInt(_.stats.rates.passing.toFixed(0))), _options: { _yAxes_label: '%'}, _extras: { _title: 'Monthly passing rates' } } }"></div>
+    </div>
+    <div class="row">
+        <div class="col-lg-8" data-bind="template: { name: 'suite-result-graph', data: { _this: $root.sanityResults, _extras: { _project: 'Core Admin', _type: 'Sanity', _cycle: 'month' } } }"></div>
+        <div class="col-lg-4" data-bind="template: { name: 'simple-line-graph', data: { _legend: 'Minutes',  _labels: $root.sanityDuration.map(_ => _.label), _data: $root.sanityDuration.map(_ => (_.duration / 60000)), _options: { _yAxes_label: ' m'}, _extras: { _title: 'Weekly duration for sanity suite (Week 1)' } } }"></div>
+    </div>
+    <div class="row">
+        <div class="col-lg-8" data-bind="template: { name: 'suite-result-graph', data: { _this: $root.regressionResults, _extras: { _project: 'Core Admin', _type: 'Regression', _cycle: 'month' } } }"></div>
+        <div class="col-lg-4" data-bind="template: { name: 'simple-line-graph', data: { _legend: 'Minutes',  _labels: $root.regressionDuration.map(_ => _.label), _data: $root.regressionDuration.map(_ => (_.duration / 60000)), _options: { _yAxes_label: ' m'}, _extras: { _title: 'Weekly duration for regression suite (Week 1)' } } }"></div>
+    </div>
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="ibox float-e-margins">
+                <div class="ibox-title">
+                    <h5>Failure analysis</h5>
+                </div>
+                <div class="ibox-content">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h4 class="no-margins">Top failing reason</h4>
+                            <ul class="list-group clear-list m-t">
+                                <li class="list-group-item fist-item">
+                                    <span class="label label-danger">1</span> Application timeout
+                                    <span class="pull-right">
+                                        10 scripts
+                                    </span>
+                                </li>
+                                <li class="list-group-item">
+                                    <span class="label label-danger">2</span> With bugs
+                                    <span class="pull-right">
+                                        5 scripts
+                                    </span>
+                                </li>
+                                <li class="list-group-item">
+                                    <span class="label label-danger">3</span> Script error
+                                    <span class="pull-right">
+                                        3 scripts
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h4 class="no-margins">Top failing modules</h4>
+                            <ul class="list-group clear-list m-t">
+                                <li class="list-group-item fist-item">
+                                    <span class="label label-danger">1</span> Journals
+                                    <span class="pull-right">
+                                        10 scripts
+                                    </span>
+                                </li>
+                                <li class="list-group-item">
+                                    <span class="label label-danger">2</span> Books
+                                    <span class="pull-right">
+                                        5 scripts
+                                    </span>
+                                </li>
+                                <li class="list-group-item">
+                                    <span class="label label-danger">3</span> Publishers
+                                    <span class="pull-right">
+                                        3 scripts
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4" data-bind="template: { name: 'simple-line-graph', data: { _legend: 'Scripts',  _labels: $root.maintenanceTrend.map(_ => _.label), _data: $root.maintenanceTrend.map(_ => _.scripts), _options: { _yAxes_label: ' scripts'},  _extras: { _title: 'Monthly Maintenance trend' } } }"></div>
+    </div>
+</div>
+
+<!-- TEMPLATES -->
+<script type="text/html" id="simple-line-graph">
+    <div class="ibox float-e-margins">
+        <div class="ibox-title">
+            <h5 data-bind="html: (_extras._title) ? _extras._title : '_extras._title'"></h5>
+        </div>
+        <div class="ibox-content">
+            <div>
+                <canvas height="114" data-bind="lineGraph: { legend: _legend, labels: _labels, data: _data, options: _options }"></canvas>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" id="data-comparison">
+    <div class="ibox float-e-margins">
+        <div class="ibox-title">
+            <h5 data-bind="html: (_extras._title) ? _extras._title : '_extras._title'"></h5>
+        </div>
+        <div class="ibox-content">
+            <div class="row">
+                <div class="col-md-3">
+                    <h1 class="no-margins" data-bind="html: _this.rates.passing.toFixed(2) + '%'"></h1>
+                    <small data-bind="html: $root.getRate(_this.rates.passing)"></small>
+                    <div data-bind="if: (_this.rates.passing != _that.rates.passing)">
+                        <div class="font-bold" data-bind="css: { 'text-danger': _this.rates.passing < _that.rates.passing , 'text-navy': _this.rates.passing >= _that.rates.passing }">
+                            <span data-bind="html: Math.abs(_this.rates.passing - _that.rates.passing).toFixed(2) + '%'"></span>
+                            <i class="fa" data-bind="css: { 'fa-level-up': _this.rates.passing > _that.rates.passing, 'fa-level-down': _this.rates.passing < _that.rates.passing }"></i>
+                            <small data-bind="html: (_extras._comparedTo) ? 'vs ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+                        </div>
+                    </div>
+                    <div data-bind="if: (_this.rates.passing == _that.rates.passing)">
+                        <div class="font-bold text-navy">
+                            <small data-bind="html: (_extras._comparedTo) ? 'Same as ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <h1 class="no-margins" data-bind="html: _this.totalFailed"></h1>
+                    <small> tests failed </small>
+                    <div data-bind="if: (_this.totalFailed != _that.totalFailed)">
+                        <div class="font-bold" data-bind="css: { 'text-danger': _this.totalFailed > _that.totalFailed , 'text-navy': _this.totalFailed < _that.totalFailed }">
+                            <span data-bind="html: Math.abs(_this.totalFailed - _that.totalFailed)"></span>
+                            <i class="fa" data-bind="css: { 'fa-level-up': _this.totalFailed > _that.totalFailed, 'fa-level-down': _this.totalFailed < _that.totalFailed }"></i>
+                            <small data-bind="html: (_extras._comparedTo) ? 'vs ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+                        </div>
+                    </div>
+                    <div data-bind="if: (_this.totalFailed == _that.totalFailed)">
+                        <div class="font-bold text-navy">
+                            <small data-bind="html: (_extras._comparedTo) ? 'Same as ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <h1 class="no-margins" data-bind="html: $root.formatTime(_this.duration)"></h1>
+                    <small> duration </small>
+                    <div data-bind="if: (_this.duration != _that.duration)">
+                        <div class="font-bold" data-bind="css: { 'text-danger': _this.duration > _that.duration , 'text-navy': _this.duration < _that.duration }">
+                            <span data-bind="html: $root.formatTime(Math.abs(_this.duration - _that.duration), false, true, false, true) + ' m'"></span>
+                            <i class="fa" data-bind="css: { 'fa-level-up': _this.duration > _that.duration, 'fa-level-down': _this.duration < _that.duration }"></i>
+                            <small data-bind="html: (_extras._comparedTo) ? 'vs ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+                        </div>
+                    </div>
+                    <div data-bind="if: (_this.duration == _that.duration)">
+                        <div class="font-bold text-navy">
+                            <small data-bind="html: (_extras._comparedTo) ? 'Same as ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" id="passing-rate-comparison">
+    <div class="ibox float-e-margins">
+        <div class="ibox-title">
+            <span class="label label-info pull-right" data-bind="html: (_extras._comparisonType) ? _extras._comparisonType : '_extras._comparisonType'"></span>
+            <h5>Passing rate</h5>
+        </div>
+        <div class="ibox-content text-center">
+            <h1 class="no-margins" data-bind="html: _this.rates.passing.toFixed(2) + '%'"></h1>
+            <small data-bind="html: $root.getRate(_this.rates.passing)"></small>
+            <div class="font-bold" data-bind="css: { 'text-danger': _this.rates.passing < _that.rates.passing , 'text-navy': _this.rates.passing >= _that.rates.passing }">
+                <span data-bind="html: Math.abs(_this.rates.passing - _that.rates.passing).toFixed(2) + '%'"></span>
+                <i class="fa" data-bind="css: { 'fa-level-up': _this.rates.passing > _that.rates.passing, 'fa-level-down': _this.rates.passing < _that.rates.passing }"></i>
+                <small data-bind="html: (_extras._comparedTo) ? 'vs ' + _extras._comparedTo : '_extras._comparedTo'"></small>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" , id="passing-rate-range-graph">
+    <div class="col-lg-4">
+        <div class="ibox float-e-margins">
+            <div class="ibox-title">
+                <h5>Monthly passing rates</h5>
+            </div>
+            <div class="ibox-content no-padding no-margins">
+                <div class="m-t-lg no-margins" style="height: 150px;" id="morris-one-line-chart"></div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" id="suite-result-graph">
+    <div class="ibox float-e-margins">
+        <div class="ibox-content">
+            <div>
+                <span class="pull-right text-right">
+                <small><span data-bind="html: (_extras._type && _extras._cycle) ? 'Average values for ' + _extras._type + ' this ' + _extras._cycle +':&nbsp;' : '_extras._type &amp; _extras._cycle'"></span>
+                <strong data-bind="html: (_extras._project) ? _extras._project : '_extras._project'"></strong>
+                </small>
+                <br/>
+                <span data-bind="html: 'Passing Rate:&nbsp;' + ((_this.map(_ => _.passed).reduce((a, b) => a + b, 0) / (_this.map(_ => _.passed).reduce((a, b) => a + b, 0) + _this.map(_ => _.failed).reduce((a, b) => a + b, 0))) * 100).toFixed(2) + '%'"></span>
+                </span>
+                <h3 class="font-bold no-margins" data-bind="html: (_extras._project && _extras._type) ? _extras._project + ' - ' + _extras._type + ' suites' : '_extras._project &amp; _extras._type'"></h3>
+                <small data-bind="html: (_extras._type) ? _extras._type + ' tests' : '_extras._type'"></small>
+            </div>
+            <div class="m-t-sm">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div>
+                            <canvas height="114" data-bind="barGraph: _this"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <ul class="stat-list m-t-lg">
+                            <li>
+                                <h2 class="no-margins" data-bind="html: _this.map(_ => _.passed).reduce((a, b) => a + b, 0)"></h2>
+                                <small>Total passed</small>
+                                <div class="progress progress-mini">
+                                    <div class="progress-bar" data-bind="style: { width: ((_this.map(_ => _.passed).reduce((a, b) => a + b, 0) / (_this.map(_ => _.passed).reduce((a, b) => a + b, 0) + _this.map(_ => _.failed).reduce((a, b) => a + b, 0))) * 100).toFixed(0) + '%' }"></div>
+                                </div>
+                            </li>
+                            <li>
+                                <h2 class="no-margins " data-bind="html: _this.map(_ => _.failed).reduce((a, b) => a + b, 0)"></h2>
+                                <small>Total Failed</small>
+                                <div class="progress progress-mini">
+                                    <div class="progress-bar" style="background-color: #f08080;" data-bind="style: { width: ((_this.map(_ => _.failed).reduce((a, b) => a + b, 0) / (_this.map(_ => _.passed).reduce((a, b) => a + b, 0) + _this.map(_ => _.failed).reduce((a, b) => a + b, 0))) * 100).toFixed(0) + '%' }"></div>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" id="duration-range-graph">
+    <div class="col-lg-4">
+        <div class="ibox float-e-margins">
+            <div class="ibox-title">
+                <h5>Weekly duration for sanity suite</h5>
+            </div>
+            <div class="ibox-content no-padding no-margins">
+                <div class="m-t-lg no-margins" style="height: 150px;" id="morris-one-line-chart2"></div>
+            </div>
+        </div>
+    </div>
+</script>

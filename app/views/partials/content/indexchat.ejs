@@ -1,0 +1,132 @@
+<% if (user) { %>
+    <div id="chatContainer">
+        <div id="chatbox" class="small-chat-box fadeInRight animated" data-bind="css: { active: $root.chatboxVisibility }" style="z-index: 9999 !important;">
+            <div class="heading" draggable="true">
+                <small class="chat-date pull-right">
+                02.19.2015
+            </small> General
+            </div>
+
+            <div id="messagesContainer" class="content">
+                
+            </div>
+            <span style="padding: 10px 10px; white-space: nowrap; font-size: 11px;" data-bind="html: $root.typingUsersFormatted"></span>
+            <div class="form-chat">
+                <form data-bind="chatForm">
+                    <div class="input-group input-group-sm">
+                        <input data-bind="value: $root.message, valueUpdate: 'afterkeydown', attr: { style: ($root.invalidMessage()) ? 'border: 1px solid #ff0000 !important;' : 'border: 1px solid #e5e6e7 !important;' }"
+                            type="text" class="form-control">
+                        <span class="input-group-btn">
+                        <button class="btn btn-primary" type="submit">Send</button>
+                    </span>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div data-bind="click: $root.resetUnreadMessages" id="small-chat">
+            <span class="badge badge-warning pull-right" data-bind="html: $root.unreadMessages"></span>
+            <a data-bind="chatTrigger" class="open-small-chat">
+                <i class="fa fa-comments"></i>
+            </a>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        var ChatViewModel = function () {
+            var root = this;
+
+            var socket = io('/public-chat');
+            var user = undefined;
+            root.message = ko.observable('').extend({ trimmed: true });
+            root.invalidMessage = ko.observable(false);
+            root.chatboxVisibility = ko.observable(false);
+            root.unreadMessages = ko.observable(0);
+            root.isTyping = ko.observable(false);
+            root.typingUsers = ko.observableArray();
+            root.typingUsersFormatted = ko.computed(function() {
+                var users = root.typingUsers().slice(0);
+                if (users.length == 0) return '';
+
+                if (users.length > 3) {
+                    var reduced = users.length - 3;
+                    return `${users[0]}, ${users[1]}, ${users[2]} and ${reduced} ${(reduced > 1) ? 'others' : 'other'} is typing ...`;
+                } else {
+                    var lastUser = users.pop();
+                    return `${users.join(', ')}${(users.length >= 1) ? ' and ' : ''}${lastUser} is typing ...`;
+                }
+            })
+            root.resetUnreadMessages = function () {
+                root.unreadMessages(0);
+            }
+
+            var chatBox = $('#messagesContainer');
+            function receiveMessageTemplate(name, message) {
+                return $.parseHTML(`<div class="left"><div class="author-name">${name}<small class="chat-date"> 10:02 am</small></div><div class="chat-message">${message}</div></div>`);
+            }
+            function sendMessageTemplate(name, message) {
+                return $.parseHTML(`<div class="right"><div class="author-name">${name}<small class="chat-date"> 10:03 am</small></div><div class="chat-message active">${message}</div></div>`);
+            }
+
+            root.message.subscribe(function(newValue) {
+                if (newValue === undefined) {
+                    socket.emit('not typing', user.fullname);
+                    root.isTyping(false);
+                }
+
+                if (newValue && !root.isTyping()) {
+                    socket.emit('typing', user.fullname);
+                    root.isTyping(true);
+                }
+            });
+
+            socket.on('status typing', function(userTyping) {
+                root.typingUsers.push(userTyping);
+            });
+
+            socket.on('status not typing', function(userTyping) {
+                root.typingUsers.remove(userTyping);
+            });
+
+            socket.on('user connected', function (data) {
+                if (user === undefined)
+                    user = data.user;
+            });
+
+            socket.on('receive message', function (data) {
+                if (!root.chatboxVisibility())
+                    root.unreadMessages(root.unreadMessages() + 1);
+
+                chatBox.append(receiveMessageTemplate(data.user.fullname, data.message));
+            });
+
+            ko.bindingHandlers.chatForm = {
+                init: function (element, valueAccessor) {
+                    $(element).submit(function (e) {
+                        e.preventDefault();
+                        if (root.message()) {
+                            root.invalidMessage(false);
+                            socket.emit('send message', { user: user, message: root.message() });
+                            chatBox.append(sendMessageTemplate(user.fullname, root.message()));
+                            root.message('');
+                        } else {
+                            root.message('');
+                            root.invalidMessage(true);
+                        }
+                    })
+                }
+            }
+
+            ko.bindingHandlers.chatTrigger = {
+                init: function (element, valueAccessor) {
+                    $(element).on('click', function () {
+                        $(element).children().toggleClass('fa-comments').toggleClass('fa-remove');
+                        root.chatboxVisibility(!root.chatboxVisibility());
+                    });
+                }
+            }
+        };
+
+        ko.applyBindings(new ChatViewModel(), document.getElementById('chatContainer'));
+
+    </script>
+    <% } %>

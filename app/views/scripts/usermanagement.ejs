@@ -1,0 +1,632 @@
+<script src="/js/plugins/iCheck/icheck.min.js"></script>
+<!-- Page View Model -->
+<script type="text/javascript">
+    //$(document).ready(function () {
+    //    $('.i-checks').iCheck({
+    //        checkboxClass: 'icheckbox_square-green'
+    //    });
+    //});
+
+    $.validator.addMethod("regex", function (value, element, regexpr) {
+        return regexpr.test(value);
+    }, "Please provide a valid format.");
+
+    function UserManagementViewModel() {
+        var root = this;
+
+        root.myUsername = ko.observable('<%= user.username %>');
+        root.myRole = ko.observable((<%= user.isSuper %>) ? 'super' : 'admin');
+
+        // Toastr
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, title || 'User Management');
+            }, 500);
+        }
+
+        // USER MODAL CONTROLS
+        root.toggleModal = function () {
+            // show/hide modal
+            $('#user-modal').modal('toggle');
+        };
+        root.editingUser = ko.observable(false); // trigger modal bindng content
+        root.viewEditorUserInfo = ko.observable(false);
+        root.disableModalClose = ko.observable(false); // disable closing of modal
+        root.submitModalHtml = ko.observable(); // modal submit html content
+        root.addNewUserTrigger = function (param) {
+            // trigger modal to display add user interface
+            root.viewEditorUserInfo(param);
+            root.newUser(new User());
+            root.editingUser(false);
+            root.submitModalHtml('Save');
+            root.toggleModal();
+        };
+
+        // ROLES
+        root.roles = ko.observableArray([]);
+        //if (<%= user.isSuper %>) {
+        root.roles.push({ name: 'Superuser', value: 'super' });
+        //}
+        root.roles.push({ name: 'Administrator', value: 'admin' });
+
+        // selected role used in editing
+        root.selectedRole = ko.observable();
+
+        // USER DISPLAY
+        root.users = ko.observableArray();
+        root.userDisplayMatrix = ko.computed(function () {
+            var matrix = [], i, k;
+
+            for (var i = 0, k = -1; i < root.users().length; i++) {
+                if (i % 3 === 0) {
+                    k++;
+                    matrix[k] = [];
+                }
+
+                matrix[k].push(root.users()[i]);
+            }
+            return matrix;
+        });
+        root.formatDate = function (date) {
+            return moment(new Date(date)).format('dddd h:mm a - MM.DD.YYYY');
+        }
+        root.pageSize = ko.observable(10);
+        root.pageIndex = ko.observable(0);
+        root.previousPage = function () {
+            if (root.pageIndex() > 0) {
+                root.pageIndex(root.pageIndex() - 1);
+            }
+        };
+        root.nextPage = function () {
+            if (root.pageIndex() >= 0 && root.pageIndex() < root.maxPageIndex()) {
+                root.pageIndex(root.pageIndex() + 1);
+            }
+        };
+        root.gotoPage = function (data) {
+            root.pageIndex(data);
+        };
+        root.maxPageIndex = ko.computed(function () {
+            return Math.ceil(root.users().length / this.pageSize() - 1)
+        }, root);
+        root.pagedUsers = ko.computed(function () {
+            var size = root.pageSize();
+            var start = root.pageIndex() * size;
+            return root.users.slice(start, start + size);
+        }, root);
+
+        // USER EDIT/CREATE VARIABLES
+        root.newUser = ko.observable(new User()); // empty user for creation
+        root.selectedUser = ko.observable(); // selected user for editing
+        root.selectUser = function (id) {
+            root.editingUser(true);
+            root.viewEditorUserInfo(false);
+            root.submitModalHtml('Save');
+            root.selectedUser(root.users().filter(_ => _._id() == id())[0]);
+        };
+        root.deleteUser = function () {
+            // trigger delete user
+            root.selectedUser().deleteUser();
+        };
+
+        // USER MODEL
+        function User(user) {
+            var _this = this;
+
+            // initialize properties from user or undefined
+            _this._id = ko.observable((user) ? user._id : undefined);
+            _this.createdDate = ko.observable((user) ? user.createdDate : new Date());
+            _this.username = ko.observable((user) ? user.username : undefined);
+            _this.email = ko.observable((user) ? user.email : undefined);
+            _this.firstName = ko.observable((user) ? user.firstName : undefined);
+            _this.lastName = ko.observable((user) ? user.lastName : undefined);
+            _this.jobTitle = ko.observable((user) ? user.jobTitle : undefined);
+            _this.enabled = ko.observable((user) ? user.enabled : false);
+            _this.availableRoles = ko.observableArray(root.roles.slice(0));
+            _this.displayedRoles = ko.observableArray(); // displayed roles in modal
+            _this.roles = ko.observableArray();
+            _this.rolesError = ko.observable(false);
+            _this.roles.subscribe(function (changes) {
+                if (_this.roles().length <= 0)
+                    _this.rolesError(true);
+                else
+                    _this.rolesError(false);
+
+                // if roles array changed
+                var change = changes[0]; // get changes ifo
+                if (change.status == 'added') { // if changes is addition
+                    _this.availableRoles.remove(root.roles().filter(_ => _.value == change.value)[0]); // add role to displayedroles
+                    _this.displayedRoles.push(root.roles().filter(_ => _.value == change.value)[0]); // add role to displayedroles
+                } else if (change.status == 'deleted') { // if changes is deletion
+                    _this.displayedRoles.remove(root.roles().filter(_ => _.value == change.value)[0]); // delete role from displayedroles
+                    _this.availableRoles.push(root.roles().filter(_ => _.value == change.value)[0]); // add role to displayedroles
+                }
+
+                if (_this.displayedRoles().filter(_ => _ && (_.value == 'super' || _.value == 'admin')).length > 0) {
+                    _this.displayedRoles().forEach(function (role) {
+                        if (role.value != 'super' && role.value != 'admin') {
+                            _this.roles.remove(role.value);
+                        }
+                    });
+                    _this.rolesAddButton(false);
+                } else {
+                    _this.rolesAddButton(true);
+                }
+            }, null, 'arrayChange');
+            _this.rolesAddButton = ko.observable(true);
+            _this.enableEdit = ko.observable(false);
+            _this.enableDelete = ko.observable(false);
+            //_this.rolesAddButton = ko.computed(function () {
+            //    return _this.availableRoles().length > 0;
+            //});
+                
+
+            // initialize roles from array of user roles
+            if (user) {
+                if (user.roles) {
+                    user.roles.forEach(function (role) {                                
+                        _this.roles.push(role);
+                    });
+                }
+            };
+
+            if (root.myRole() == 'admin') {
+                _this.availableRoles.remove(_ => _.value == 'super');
+                if (!_this.roles().includes('super')) {
+                    _this.enableEdit(true);
+                    if (_this.username() != root.myUsername())
+                        _this.enableDelete(true);
+                }
+            } else if (root.myRole() == 'super') {
+                _this.enableEdit(true);
+                _this.enableDelete(true);
+            }
+
+            // combines first and last name
+            _this.fullName = ko.computed(function () {
+                if (!_this.firstName() && !_this.lastName())
+                    return undefined;
+
+                return `${_this.firstName() || ''} ${_this.lastName() || ''}`
+            });
+
+            // model functions
+            // add role to itself - get selectedrole from viewmodel
+            _this.addRole = function () {
+                if (!_this.roles().includes(root.selectedRole().value))
+                    _this.roles.push(root.selectedRole().value);
+            };
+
+            // remove role from itself
+            _this.removeRole = function (role) {
+                _this.roles.remove(role);
+            };
+
+            // save this new user
+            _this.saveNewUser = function () {
+                if ($('#user-modal-form').valid()) {
+                    if (_this.roles().length == 0) {
+                        _this.rolesError(true);
+                        toastrTrigger('Please add roles.', undefined, 'warning');
+                        return;
+                    }
+
+                    root.submitModalHtml('<i class="fa fa-spinner fa-pulse"></i>'); // change submit button html content
+                    root.disableModalClose(true); // disable closing of modal
+                    var user = JSON.parse(ko.toJSON(_this)); // convert knockout model to json object
+                    $.ajax({ // post converted model to user creation api
+                        type: 'POST',
+                        url: '/api/user',
+                        data: JSON.stringify(user),
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        success: function (result) {
+                            if (result.success) {
+                                // if result returned successful
+                                _this._id(result.id); // put generate id to the model
+                                root.users.push(_this); // add model to displayed users
+                                toastrTrigger(result.message); // trigger snackbar
+                                root.newUser(new User()); // clean user data
+                                root.toggleModal(); // close modal
+                                root.disableModalClose(false); // enable closing of modal
+                            } else {
+                                if (result.validation) {
+                                    Object.keys(result.validation).forEach(function (key) {
+                                        toastrTrigger(result.validation[key].message, undefined, 'error');
+                                    });
+                                } else {
+                                    toastrTrigger(result.message, undefined, 'error');
+                                }
+                                root.submitModalHtml('Save');
+                                root.disableModalClose(false); // enable closing of modal
+                            }
+                        }
+                    });
+                }
+            };
+
+            // update this user
+            _this.saveUserData = function () {
+                if ($('#user-modal-form').valid()) {
+                    if (_this.roles().length == 0) {
+                        _this.rolesError(true);
+                        toastrTrigger('Please add roles.', undefined, 'warning');
+                        return;
+                    }
+
+                    root.submitModalHtml('<i class="fa fa-spinner fa-pulse"></i>'); // change submit button html content
+                    root.disableModalClose(true); // disable closing of modal
+                    var user = JSON.parse(ko.toJSON(_this)); // convert knockout model to json object
+                    $.ajax({ // put converted model to user update api
+                        type: 'PUT',
+                        url: `/api/user/${_this._id()}`,
+                        data: JSON.stringify(user),
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        success: function (result) {
+                            if (result.success) {
+                                // if result returned successful
+                                root.toggleModal(); // close modal
+                                toastrTrigger(result.message);
+                                root.disableModalClose(false); // enable closing of modal
+                            } else {
+                                if (result.validation) {
+                                    Object.keys(result.validation).forEach(function (key) {
+                                        toastrTrigger(result.validation[key].message, undefined, 'error');
+                                    });
+                                } else {
+                                    toastrTrigger(result.message, undefined, 'error');
+                                }
+                                root.submitModalHtml('Save');
+                                root.disableModalClose(false); // enable closing of modal
+                            }
+                        }
+                    });
+                }
+            };
+
+
+            // delete this user
+            _this.deleteUser = function () {
+                $.ajax({
+                    type: 'DELETE',
+                    url: `/api/user/${_this._id()}`, // trigger user deletion api and pass userid
+                    success: function (result) {
+                        if (result.success) {
+                            // if result returned successful
+                            root.users.remove(_this); // remove user from displayed users
+                            toastrTrigger(result.message); // trigger snackbar
+                        } else {
+                            toastrTrigger(result.message, undefined, 'error');
+                        }
+                    }
+                });
+            }
+        };
+
+        /*
+        $(document).ready(function () {
+            if ($(window).height() >= $("body").height()) {
+                loadMoreUser();
+            }
+        });
+
+        $(window).scroll(function () {
+            if ($(window).scrollTop() == $(document).height() - $(window).height()) {
+                if ($('#tab-2').hasClass('active'))
+                    loadMoreUser();
+            }
+        });*/
+
+        ko.bindingHandlers.filterForm = {
+            init: function (element, valueAccessor) {
+                root.clearFilterForm = function () {
+                    while (root.filterRoles().length > 0) {
+                        root.filterRoles.pop();
+                    }
+                    $('#filterDisabledUsers').iCheck('uncheck');
+                    root.filterName(undefined);
+                    root.filterEmail(undefined);
+                    root.filterJobTitle(undefined);
+                };
+                root.submitFilterFormHTML = ko.observable('Search');
+                root.roles.subscribe(function () {
+                    root.filterAvailableRoles(root.roles.slice(0));
+                });
+                root.filterSelectedRole = ko.observable();
+                root.filterAvailableRoles = ko.observableArray();
+                root.filterDisplayedRoles = ko.observableArray();
+                root.filterRoles = ko.observableArray();
+                root.filterRoles.subscribe(function (changes) {
+                    // if roles array changed
+                    var change = changes[0]; // get changes ifo
+                    if (change.status == 'added') { // if changes is addition
+                        root.filterAvailableRoles.remove(change.value); // add role to displayedroles
+                        root.filterDisplayedRoles.push(change.value); // add role to displayedroles
+                    } else if (change.status == 'deleted') { // if changes is deletion
+                        root.filterDisplayedRoles.remove(change.value); // delete role from displayedroles
+                        root.filterAvailableRoles.push(change.value); // add role to displayedroles
+                    }
+                }, null, 'arrayChange');
+                root.filterIncludeRole = function () {
+                    if (!root.filterRoles().includes(root.filterSelectedRole())) {
+                        root.filterSelectedRole().include = true;
+                        root.filterRoles.push(root.filterSelectedRole());
+                    }
+                };
+                root.filterExcludeRole = function () {
+                    if (!root.filterRoles().includes(root.filterSelectedRole())) {
+                        root.filterSelectedRole().include = false;
+                        root.filterRoles.push(root.filterSelectedRole());
+                    }
+                };
+                root.filterRemoveRole = function (role) {
+                    root.filterRoles.remove(_ => _.value == role);
+                };
+                root.filterRoleAddButton = ko.computed(function () {
+                    return root.filterAvailableRoles().length > 0;
+                });
+                root.filterName = ko.observable();
+                root.filterEmail = ko.observable();
+                root.filterJobTitle = ko.observable();
+                root.filterDisabled = ko.observable(false);
+                root.filterQuery = ko.computed(function () {
+                    var includedRoles = [];
+                    var excludedRoles = [];
+                    root.filterRoles().forEach(function (role) {
+                        if (role.include)
+                            includedRoles.push(role.value);
+                        else if (!role.include)
+                            excludedRoles.push(role.value);
+                    });
+                    var query = {
+                        $or: (root.filterName() && root.filterName() != '') ? [
+                            { firstName: { $regex: root.filterName(), $options: 'i' } },
+                            { lastName: { $regex: root.filterName(), $options: 'i' } }
+                        ] : undefined,
+                        email: (root.filterEmail() && root.filterEmail() != '') ? { $regex: root.filterEmail(), $options: 'i' } : undefined,
+                        jobTitle: (root.filterJobTitle() && root.filterJobTitle() != '') ? { $regex: root.filterJobTitle(), $options: 'i' } : undefined,
+                        roles: (includedRoles.length > 0 || excludedRoles.length > 0) ? {
+                            $in: (includedRoles.length > 0) ? includedRoles : undefined,
+                            $nin: (excludedRoles.length > 0) ? excludedRoles : undefined
+                        } : undefined,
+                        enabled: (!root.filterDisabled()) ? true : undefined
+                    }
+                    return JSON.parse(JSON.stringify(query));
+                });
+                $(element).submit(function (e) {
+                    e.preventDefault();
+                    root.submitFilterFormHTML('<i class="fa fa-spinner fa-pulse"></i>');
+                    $.ajax({
+                        type: 'POST',
+                        url: '/api/users',
+                        data: JSON.stringify({ query: root.filterQuery() }),
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        success: function (result) {
+                            root.users([]);
+                            if (result.length > 0) {
+                                result.forEach(function (user) {
+                                    root.users.push(new User(user));
+                                });
+                            }
+                            root.submitFilterFormHTML('Search');
+                        }
+                    });
+                });
+            }
+        };
+
+        var loadMoreUser = function () {
+            $.ajax({
+                type: 'POST',
+                url: '/api/users',
+                data: JSON.stringify({ query: root.filterQuery(), options: {} }),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    result.forEach(function (user) {
+                        root.users.push(new User(user));
+                    });
+                }
+            });
+        };
+
+
+        // initialization
+        // fetch available roles from projects
+        $.ajax({
+            type: 'POST',
+            url: '/api/getProjects',
+            data: JSON.stringify({ query: {} }),
+            contentType: 'application/json; charset=utf8',
+            dataType: 'json',
+            success: function (result) {
+                result.forEach(function (project) {
+                    root.roles.push({ name: project.name, value: project.projectKey });
+                });
+                // INITIALIZE USERS
+                $.ajax({
+                    type: 'POST',
+                    url: '/api/users',
+                    data: JSON.stringify({ query: { enabled: true }, options: {} }),
+                    contentType: 'application/json; charset=utf-8',
+                    dataType: 'json',
+                    success: function (result) {
+                        result.forEach(function (user) {
+                            root.users.push(new User(user));
+                        });
+                    }
+                });
+            }
+        });
+
+        ko.bindingHandlers.ICheckBox = {
+            init: function (element, valueAccessor) {
+                $(element).iCheck({
+                    checkboxClass: 'icheckbox_square-green'
+                });
+
+                $(element).on('ifChanged', function () {
+                    var observable = valueAccessor();
+                    observable($(element)[0].checked);
+                })
+            }
+        };
+
+        ko.bindingHandlers.validate = {
+            init: function (element, valueAccessor) {
+                $(element).validate({
+                    errorClass: 'error jquery-invalid',
+                    rules: {
+                        username: {
+                            required: true,
+                            minlength: 8,
+                            maxlength: 15
+                        },
+                        email: {
+                            required: true,
+                            regex: /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@cambridge.org$/
+                        },
+                        firstname: {
+                            required: true
+                        },
+                        lastname: {
+                            required: true
+                        }
+                    },
+                    messages: {
+                        email: {
+                            regex: 'Please provide a Cambridge email.'
+                        }
+                    }
+                })
+            }
+        };
+
+        // CONTEXT MENU
+        ko.bindingHandlers.userContextMenu = {
+            init: function (element, valueAccessor) {
+                // Open context menu
+                $(element).on("contextmenu", function (e) {
+                    // return native menu if pressing control
+                    if (e.ctrlKey) return;
+
+                    if (!valueAccessor().enabled)
+                        return;
+
+                    $('#pageContextMenu').hide();
+
+                    root.editingUser(true);
+                    root.viewEditorUserInfo(true);
+                    root.submitModalHtml('Save');
+                    root.selectedUser(root.users().filter(_ => _._id() == valueAccessor().data._id())[0]);
+
+                    //open menu
+                    var $menu = $('#userContextMenu')
+                        .data("invokedOn", $(e.target))
+                        .show()
+                        .css({
+                            position: "absolute",
+                            left: getMenuPosition(e.clientX, 'width', 'scrollLeft'),
+                            top: getMenuPosition(e.clientY, 'height', 'scrollTop')
+                        })
+                        .off('click')
+                        .on('click', 'li', function (e) {
+                            /*if(e.target.getAttribute('data-submenu') == null) {
+                                $menu.hide();
+                            } else {
+                                $menu.hide();
+                            } */
+                            $menu.hide();
+                        });
+
+                    function getMenuPosition(mouse, direction, scrollDir) {
+                        var win = $(window)[direction](),
+                            scroll = $(window)[scrollDir](),
+                            menu = $('#userContextMenu')[direction](),
+                            position = mouse + scroll
+
+                        if (direction == 'width')
+                            position -= $('#sidebar').width();
+
+                        // opening menu would pass the side of the page
+                        if (mouse + menu > win && menu < mouse)
+                            position -= menu;
+
+                        return position;
+                    };
+
+                    return false;
+                });
+
+                //make sure menu closes on any click
+                $('body').click(function () {
+                    $('#userContextMenu').hide();
+                });
+            }
+        };
+
+        ko.bindingHandlers.pageContextMenu = {
+            init: function (element, valueAccessor) {
+                // Open context menu
+                $(element).on("contextmenu", function (e) {
+                    // return native menu if pressing control
+                    if (e.ctrlKey) return;
+
+                    $('#userContextMenu').hide();
+
+                    //open menu
+                    var $menu = $('#pageContextMenu')
+                        .data("invokedOn", $(e.target))
+                        .show()
+                        .css({
+                            position: "absolute",
+                            left: getMenuPosition(e.clientX, 'width', 'scrollLeft'),
+                            top: getMenuPosition(e.clientY, 'height', 'scrollTop')
+                        })
+                        .off('click')
+                        .on('click', 'li', function (e) {
+                            /*if(e.target.getAttribute('data-submenu') == null) {
+                                $menu.hide();
+                            } else {
+                                $menu.hide();
+                            } */
+                            $menu.hide();
+                        });
+
+                    function getMenuPosition(mouse, direction, scrollDir) {
+                        var win = $(window)[direction](),
+                            scroll = $(window)[scrollDir](),
+                            menu = $('#pageContextMenu')[direction](),
+                            position = mouse + scroll;
+
+                        if (direction == 'width')
+                            position -= $('#sidebar').width();
+
+                        // opening menu would pass the side of the page
+                        if (mouse + menu > win && menu < mouse)
+                            position -= menu;
+
+                        return position;
+                    };
+
+                    return false;
+                });
+
+                //make sure menu closes on any click
+                $('body').click(function () {
+                    $('#pageContextMenu').hide();
+                });
+            }
+        };
+
+    };
+
+    ko.applyBindings(new UserManagementViewModel(), document.getElementById('wrapper-content'));
+</script>

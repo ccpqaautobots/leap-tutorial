@@ -1,0 +1,24 @@
+<div class="row wrapper border-bottom white-bg page-heading">
+    <div class="col-lg-10">
+        <h2>Test Result</h2>
+        <ol class="breadcrumb">
+            <li>
+                <a href="/">Home</a>
+            </li>
+            <li>
+                <a href="/execution">Execution</a>
+            </li>
+             <li>
+            <%if (testresult.type == 'Suite') {%>
+                <a href="/execution/testresults">View Test Results</a>
+            <%} else {%>
+                <a href="/execution/testresults?activeTab=script">View Test Results</a>
+            <% } %>
+            </li>
+            <li>
+                <a href="#"><%= testresult.type %> - <%= testresult.testName %></a>
+            </li>
+        </ol>
+    </div>
+    <div class="col-lg-2"></div>
+</div>

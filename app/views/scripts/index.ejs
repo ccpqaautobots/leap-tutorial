@@ -1,0 +1,64 @@
+<script>
+    function DashboardViewModel() {
+        var root = this;
+        root.featuresLoading = ko.observable(true);
+        root.newFeature = ko.observable();
+        root.features = ko.observableArray();
+
+        function Feature(feature) {
+            var _this = this;
+
+            _this.feature = feature.feature;
+            _this.date = moment(feature.date) || moment();
+            _this.formattedDate = ko.computed(function () {
+                if (moment().diff(_this.date, 'days') == 0)
+                    return 'Today' + _this.date.format(` h:mm a - MM.DD.YYYY`);
+                else
+                    return _this.date.format(`dddd h:mm a - MM.DD.YYYY`);
+            });
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/api/feature',
+            success: function (result) {
+                if (result.success) {
+                    var mapping = {
+                        'features': {
+                            create: function (options) {
+                                return new Feature(options.data);
+                            }
+                        }
+                    }
+                    root.featuresLoading(false);
+                    ko.mapping.fromJS(result, mapping, root);
+                }
+            }
+        })
+
+        ko.bindingHandlers.featureForm = {
+            init: function (element, valueAccessor) {
+                $(element).submit(function (e) {
+                    e.preventDefault();
+                    if (root.newFeature() && root.newFeature() != '') {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/api/feature',
+                            data: JSON.stringify(new Feature({ feature: root.newFeature() })),
+                            contentType: 'application/json; charset=utf8',
+                            dataType: 'json',
+                            success: function (result) {
+                                if (result.success) {
+                                    root.features.unshift(new Feature({ feature: result.feature.feature, date: result.feature.date }));
+                                    root.newFeature('');
+                                }
+                            }
+                        });
+                    }
+                })
+            }
+        }
+    }
+
+    ko.applyBindings(new DashboardViewModel(), document.getElementById('wrapper-content'));
+</script>

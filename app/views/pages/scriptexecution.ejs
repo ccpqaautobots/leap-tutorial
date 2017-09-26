@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <% include ../partials/shared/head %>
+</head>
+
+<body class="hold-transition skin-blue sidebar-mini">
+    <div class="wrapper">
+
+        <% include ../partials/shared/header %>
+
+        <!-- Content Wrapper. Contains page content -->
+        <div class="content-wrapper">
+            <!-- Main content -->
+            <section class="content">
+
+                <div class="container-fluid">
+                    <div class="box">
+                        <!-- /.box-header -->
+                        <div class="box-body no-padding">
+                            <div class="pull-right"> 
+                                <select class="pull-right" name="project" data-bind="options: projects, value: selectedProject, optionsText: 'name'"></select>
+                                <input type="text" data-bind="value: search, valueUpdate: 'afterkeydown'"></input>
+                            </div>
+                            <table class="table">
+                                <th>Project</th>
+                                <th>Sub Project</th>
+                                <th>Test Name</th>
+                                <th>Author</th>
+                                <th>Run</th>
+                                <tbody data-bind="foreach: pagedScripts">
+                                    <tr>
+                                        <td><label data-bind="text: project" /></td>
+                                        <td><label data-bind="text: subProject" /></td>
+                                        <td><label data-bind="text: testName" /></td>
+                                        <td><label data-bind="text: author" /></td>
+                                        <td>
+                                            <div class="box-tools">
+                                                <div class="box-tools">
+                                                    <label><input type="checkbox" data-bind="checked: includeRun"></label>
+                                                 </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- /.box-body -->
+                        <div class="box-footer clearfix">
+                            <div class="pull-right">
+                                <ul class="pagination pagination-sm no-margin">
+                                    <li><a href="#" data-bind="click: previousPage, css: {'disabled': pageIndex() <= 0}">«</a></li>
+                                </ul>
+                                <ul class="pagination pagination-sm no-margin" data-bind="foreach: new Array(maxPageIndex() + 1)">
+                                    <li data-bind="css: {'active': $index() == $parent.pageIndex() }">
+                                        <a href="#" data-bind="text: $index() + 1, click: $parent.gotoPage.bind($data, $index())">0</a>
+                                    </li>
+                                </ul>
+                                <ul class="pagination pagination-sm no-margin">
+                                    <li><a href="#" data-bind="click: nextPage, css: {'disabled': pageIndex() >= maxPageIndex()}">»</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <span id="loaderContainer">
+                            <div id="loader" class="overlay">
+                                <i class="fa fa-refresh fa-spin"></i>
+                            </div>
+                        </span>
+                    </div>
+                    <!-- /.box -->
+                </div>
+                <button data-bind="click: runTrigger"></button>
+            </section>
+            <!-- /.content -->
+
+            <!-- Page View Model -->
+            <script type="text/javascript">
+                function ScriptExecutionViewModel(data) {				
+                    _this = this;
+                    
+                    _this.projects = ko.observableArray([
+                        { name: "", value: "" },
+                        { name: "Platform Services", value: "platserv" },
+                        { name: "Core Admin", value: "coreadmin" },
+                        { name: "Cambridge Core", value: "core" },
+                        { name: "Content Admin", value: "content" },
+                        { name: "Membership Services", value: "memserv" }
+                    ]);
+
+                    _this.selectedProject = ko.observable();
+
+                    _this.selectedProject.subscribe(function() {
+                        // ajax call get document for page
+                        if (_this.selectedProject().value != '') {
+                            $('#loaderContains').append('<div id="loader" class="overlay"><i class="fa fa-refresh fa-spin"></i></div>');
+                            $.ajax({
+                                type: "GET",
+                                url: "/api/scripts?project=" + _this.selectedProject().value,
+                                success: function(data){
+                                    _this.scripts.removeAll();
+                                    for (var i = 0; i < data.length; i++) {
+                                        _this.scripts.push(new Script(data[i]._id, data[i].project, 
+                                                data[i].subProject, data[i].testName, data[i].author));
+                                    }
+                                    $('#loader').remove();
+                                }
+                            });
+                        }
+                    });
+
+                    _this.search = ko.observable();
+
+                    // model for script
+                    function Script(_id, project, subProject, testName, author) {
+                        var _this = this;
+                        _this._id = _id;
+                        _this.project = project;
+                        _this.subProject = subProject;
+                        _this.testName = testName;
+                        _this.author = author;
+                        _this.includeRun = false;
+                    }
+                    _this.scripts = ko.observableArray([]);
+
+                    if (data) {
+                        for (var i = 0; i < data.length; i++) {
+                            _this.scripts.push(new Script(data[i]._id, data[i].project, 
+                                    data[i].subProject, data[i].testName, data[i].author));
+                        }
+                    }
+                    
+                    _this.pageSize = ko.observable(5);
+                    _this.pageIndex = ko.observable(0);
+                    _this.previousPage = function() {
+                        if (_this.pageIndex() > 0) {
+                            _this.pageIndex(_this.pageIndex() - 1);
+                        }
+                    };
+                    _this.nextPage = function() {
+                        if (_this.pageIndex() >= 0 && _this.pageIndex() < _this.maxPageIndex()) {
+                            _this.pageIndex(_this.pageIndex() + 1);
+                        }
+                    };
+                    _this.gotoPage = function(data) {
+                        _this.pageIndex(data);
+                    };
+                    _this.maxPageIndex = ko.computed(function() {
+                        return Math.ceil(_this.scripts().length / this.pageSize() - 1)
+                    }, _this);
+                    _this.pagedScripts = ko.computed(function() {
+                        var size = _this.pageSize();
+                        var start = _this.pageIndex() * size;
+                        if (_this.search() == undefined) {
+                            return _this.scripts.slice(start, start + size);
+                        } else {
+                            return _this.scripts().filter(_ => _.testName.toLowerCase().includes(_this.search().toLowerCase()) ||
+                                         _.author.toLowerCase().includes(_this.search().toLowerCase()) ||
+                                         _.subProject.toLowerCase().includes(_this.search().toLowerCase())).slice(start, start + size);
+                        }
+                    }, _this);
+                    _this.editButton = function(data) {					
+                        $.ajax({
+                            type: "GET",
+                            url: "/api/scripts?id=" + data,
+                            success: function(result) {
+                                var wizardViewModel = new ScriptWizardViewModel(result);
+                            }
+                        });
+                    };
+                    _this.runTrigger = function() {	
+                        var ids = _this.scripts().filter(_ => _.includeRun == true).map(_ => _._id);
+                        $.ajax({
+                            type: "POST",
+                            url: "/api/scripts/run",
+                            traditional: true,
+                            dataType: "application/json",
+                            data: (ids.length > 1) ? { data: ids } : $.param({ data: ids }, true),
+                            success: function(run_response){
+                                /*
+                                var fetchLogs = setInterval(function() {
+                                    $.ajax({
+                                        type: "GET",
+                                        url: "/api/scripts/run/log?identifier=" + run_response.id,
+                                        success: function(log_response){
+                                            console.log(log_response);
+                                            if (log_response.done) {
+                                                console.log('Done! clearing interval.');
+                                                clearInterval(fetchLogs);
+                                            }
+                                        }
+                                    });
+                                }, 5000);
+                                */
+                            }
+                        });
+                    };
+                    _this.deleteButton = function(data) {
+                        $.ajax({
+                            type: "DELETE",
+                            url: "/api/scripts?id=" + data._id,
+                            success: function(result){
+                                var oldMaxPage = _this.maxPageIndex();
+                                if (oldMaxPage != _this.pageIndex()) {
+                                    _this.scripts.remove(data);
+                                } else {
+                                    _this.scripts.remove(data);
+                                    if (oldMaxPage != _this.maxPageIndex()) {
+                                        _this.gotoPage(_this.maxPageIndex());
+                                    }
+                                }
+                                alert(result.message);
+                            }
+                        });					
+                    };
+                }; // end of script repository view model
+
+                if (<%- JSON.stringify(project) %> == null) {
+                    ko.applyBindings(new ScriptExecutionViewModel());
+                    $('#loader').remove();
+                } else {
+                    $.ajax({
+						type: "GET",
+						url: "/api/scripts?project=<%- project %>",
+						success: function(result){
+							var scripts = [];
+							
+							for (var s in result) {
+								scripts.push(result[s]);
+							}
+							ko.applyBindings(new ScriptExecutionViewModel(scripts));
+                            $('#loader').remove();
+						}
+					});
+                }
+                
+            </script>
+            <!-- Page View Model End -->
+
+        </div>
+        <!-- /.content-wrapper -->
+
+        <footer class="main-footer">
+            <div class="pull-right hidden-xs">
+                <b>Version</b> 2.3.7
+            </div>
+            <strong>Copyright &copy; 2014-2016 <a href="http://almsaeedstudio.com">Almsaeed Studio</a>.</strong> All rights
+            reserved.
+        </footer>
+
+        <!-- Control Sidebar -->
+        <% include ../partials/shared/controlsidebar %>
+            <!-- /.control-sidebar -->
+
+            <!-- Add the sidebar's background. This div must be placed
+       immediately after the control sidebar -->
+            <div class="control-sidebar-bg"></div>
+    </div>
+    <!-- ./wrapper -->
+    <% include ../partials/shared/scripts %>
+</body>
+
+</html>

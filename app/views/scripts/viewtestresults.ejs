@@ -1,0 +1,726 @@
+<!-- Select2 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
+<script type="text/javascript">
+    var _token = '<%= user.token %>';
+    var _projects = <%- JSON.stringify(projects) %>;
+    var _user = <%- JSON.stringify(user) %>;
+
+    Array.prototype.contains = function (v) {
+        for (var i = 0; i < this.length; i++) {
+            if (this[i] === v) return true;
+        }
+        return false;
+    };
+
+    Array.prototype.unique = function () {
+        var arr = [];
+        for (var i = 0; i < this.length; i++) {
+            if (!arr.contains(this[i])) {
+                arr.push(this[i]);
+            }
+        }
+        return arr;
+    }
+
+    function ViewTestResults() {
+        var root = this;
+
+        root.projects = ko.observableArray();
+        var user = _user;
+        var projects = _projects;
+
+        if (user.isAdmin || user.isSuper){
+            projects.forEach(function (project){
+                root.projects.push(project.name);
+            })
+        } else {
+            projects.forEach(function (project){
+                user.roles.forEach(function (role){
+                    if (role === project.projectKey)
+                        root.projects.push(project.name);
+                });
+            });
+        }
+        // #########################################
+        // MODELS - FOR EASY DATA MANIPULATION
+        // #########################################
+
+        // test result model
+        function TestResult(tresult) {
+            var _tresult = this;
+
+            _tresult._id = ko.observable((tresult) ? tresult._id || undefined : undefined);
+            _tresult.runBy = ko.observable((tresult) ? tresult.runBy || '' : '');
+            _tresult.runDate = ko.observable((tresult) ? tresult.runDate || undefined : undefined);
+            _tresult.status = ko.observable((tresult) ? tresult.status || undefined : undefined);
+            _tresult.isFailure = ko.observable((tresult) ? tresult.isFailure || false : false);
+            _tresult.totalPassed = ko.observable((tresult) ? tresult.totalPassed || 0 : 0);
+            _tresult.totalFailed = ko.observable((tresult) ? tresult.totalFailed || 0 : 0);
+            _tresult.totalWarning = ko.observable((tresult) ? tresult.totalWarning || 0 : 0);
+            _tresult.total = ko.observable((tresult) ? tresult.total || 0 : 0);
+            _tresult.logs = ko.observable((tresult) ? tresult.logs || undefined : undefined);
+            _tresult.done = ko.observable((tresult) ? tresult.done || false : false);
+            _tresult.remarks = ko.observable((tresult) ? tresult.remarks || undefined : undefined);
+            _tresult.isSuite = ko.observable((tresult) ? tresult.isSuite || false : false);
+            _tresult.isScript = ko.observable((tresult) ? tresult.isScript || false : false);
+            _tresult.type = ko.observable((tresult) ? tresult.type || undefined : undefined);
+            _tresult.scriptId = ko.observable((tresult) ? tresult.scriptId || undefined : undefined);
+            _tresult.project = ko.observable((tresult) ? tresult.project || undefined : undefined);
+            _tresult.projectName = ko.observable((tresult) ? tresult.projectName || undefined : undefined);
+            _tresult.module = ko.observable((tresult) ? tresult.module || undefined : undefined);
+            _tresult.testName = ko.observable((tresult) ? tresult.testName || undefined : undefined);
+            _tresult.author = ko.observable((tresult) ? tresult.author || undefined : undefined);
+            _tresult.cycle = ko.observableArray((tresult) ? tresult.cycle || undefined : undefined);
+
+            _tresult.cycleFormatted = ko.observable();
+
+            if (_tresult.cycle) {
+                var str = "";
+                _tresult.cycle().forEach(function (item) {
+                    str = str + item + ", ";
+                });
+                str = str.substring(0, str.length - 2);
+                _tresult.cycleFormatted(str);
+            }
+
+            // fetch updates when result not done
+            if (!_tresult.done()) {
+                var getResults = setInterval(function () {
+                    $.ajax({
+                        type: 'GET',
+                        url: `/api/queuer_info?_id=${_tresult._id()}`,
+                        headers: {
+                            'x-access-token': _token || undefined
+                        },
+                        success: function (result) {
+                            // if no results was found
+                            // script is queued or finished
+                            if (!result || result.done) {
+                                clearInterval(getResults);
+                                $.ajax({
+                                    type: 'GET',
+                                    url: `/api/test_result/${_tresult._id()}`,
+                                    success: function (finished_result) {
+                                        // if script is not yet done (queued)
+                                        if (!finished_result.done) {
+                                            $.ajax({
+                                                type: 'GET',
+                                                url: `/api/update_run_error/${_tresult._id()}`,
+                                                success: function (error_result) {
+                                                    _tresult.done(error_result.done);
+                                                    _tresult.status(error_result.status);
+                                                    _tresult.isFailure(error_result.isFailure);
+                                                }
+                                            });
+                                            return; // cancel updating script info
+                                        }
+
+                                        _tresult.done(finished_result.done);
+                                        _tresult.status(finished_result.status);
+                                        _tresult.isFailure(finished_result.isFailure);
+                                    }
+                                });
+                                // if result was found, poll for updates
+                            } else {
+                                if (result) {
+                                    _tresult.status(result.result.status);
+                                }
+                            }
+                        }
+                    })
+                }, 5000);
+            }
+        };
+
+        // #########################################
+        // DATA VARIABLES - USED FOR INTERFACE DATA PRESENTATION
+        // #########################################
+
+        root.isUserResults = ko.observable(true);
+        root.pagedTestResults = ko.observableArray([]);
+        root.suiteResults = ko.observableArray([]);
+        root.scriptResults = ko.observableArray([]);
+        root.pagedScriptResults = ko.observableArray([]);
+
+        root.quickSearchCriteriaSuite = ko.observable('');
+        root.quickSearchFilterSuite = ko.observable({ name: 'Suite Name', value: 'testName' });
+        root.availableProjectsSuite = ko.observableArray();
+        root.availableUsers = ko.observableArray();
+        root.availableSuiteModules = ko.observableArray();
+        root.availableSuiteCycles = ko.observableArray();
+        root.availableScriptModules = ko.observableArray();
+        root.availableScriptCycles = ko.observableArray();
+
+        root.suiteOptions = ko.observable({limitRoles: true, isUserResults: root.isUserResults()});
+        root.suiteQuery = ko.observable({isScript: false, isSuite: true});
+
+        root.isUserResultsScript = ko.observable(true);
+        root.quickSearchCriteriaScript = ko.observable('');
+        root.quickSearchFilterScript = ko.observable({ name: 'Script Name', value: 'testName' });
+        root.availableProjectsScript = ko.observableArray();
+
+        root.scriptOptions = ko.observable({limitRoles: true, isUserResults: root.isUserResultsScript()});
+        root.scriptQuery = ko.observable({isScript: true, isSuite: false});
+
+        root.advancedSearchType = ko.observable();
+
+        // #########################################
+        // FUNCTIONS - TRIGGER EVENTS
+        // #########################################
+        
+        root.changeQuickSearchSuite = function (data) {
+            root.quickSearchFilterSuite(data); // updated selected quicksearch from selection
+        };
+        root.quickSearchSuite = function () {
+            // quick search function
+            var query = root.suiteQuery();
+            // use quicksearch filter as object key (ex. { project: criteria })
+            query[root.quickSearchFilterSuite().value] = {
+                $regex: root.quickSearchCriteriaSuite(),
+                $options: 'i'
+            };
+            
+            root.getMyTestResults(query, root.suiteOptions(), 'suiteResults'); // trigger ajax query scripts
+        };
+        root.aqSearchClear = function (clearQuickSearch) {
+            // clear advance and/or quick search
+            $('select.aSearchSelect2').each(function (index, element) {
+                $(element).select2("val", ""); // foreach select2 element in ui - set value to empty
+            });
+            // clear filter observables
+            root.aSearchResult('');
+            root.aSearchProjects([]);
+            root.aSearchModules([]);
+            root.aSearchCycles([]);
+            root.aSearchRunBy([]);
+            root.aSearchStatus([]);
+            root.aSearchFromDate(undefined);
+            root.aSearchToDate(undefined);
+            root.createdSelectedRange(undefined);
+        };
+
+        root.clearQuickSearch = function (type) {
+            if (type == 'suite'){
+                root.quickSearchCriteriaSuite('');
+                root.suiteQuery({isScript: false, isSuite: true});
+                root.getMyTestResults(root.suiteQuery(), root.suiteOptions(), 'suiteResults', true);
+            } else if (type == 'script') {
+                root.quickSearchCriteriaScript('');
+                root.scriptQuery({isScript: true, isSuite: false});
+                root.getMyTestResults(root.scriptQuery(), root.scriptOptions(), 'scriptResults', true);
+            }
+        }
+
+        //################### script VV
+
+        root.changeQuickSearchScript = function (data) {
+            root.quickSearchFilterScript(data); // updated selected quicksearch from selection
+        };
+        root.quickSearchScript = function () {
+            // quick search function
+            var query = root.scriptQuery();
+            // use quicksearch filter as object key (ex. { project: criteria })
+            query[root.quickSearchFilterScript().value] = {
+                $regex: root.quickSearchCriteriaScript(),
+                $options: 'i'
+            };
+            
+            root.getMyTestResults(query, root.scriptOptions(), 'scriptResults'); // trigger ajax query scripts
+        };
+        root.aqSearchClearScript = function (clearQuickSearch) {
+            // clear advance and/or quick search
+            $('select.aSearchSelect2').each(function (index, element) {
+                $(element).select2("val", ""); // foreach select2 element in ui - set value to empty
+            });
+            // clear filter observables
+            root.aSearchResultScript('');
+            root.aSearchAuthorScript([]);
+            root.aSearchStatusScript([]);
+            root.aSearchCreatedDateScript(undefined);
+            root.aSearchUpdatedDateScript(undefined);
+            root.createdSelectedRangeScript(undefined);
+
+            if (clearQuickSearchScript) { // optional - clear quicksearch (boolean)
+                root.quickSearchCriteriaScript('');
+                root.searchScenariosScript({isSuite: false, isScript: true});
+            }
+        };
+
+
+        // #########################################
+        // UI VARIABLES - FOR FANCY UI EFFECTS (ex. loading)
+        // #########################################
+        root.isZeroResult = ko.observable(false);
+        root.isLoadingResults = ko.observable(true);
+        root.formatDate = function (knockoutDate) {
+            if (knockoutDate() === undefined)
+                return null;
+
+            var date = new Date(knockoutDate());
+            return moment(date).format("YYYY-MM-DD HH:mm:ss");
+        };
+
+        root.pageSizesSuite = ko.observable([
+            { name: '10 per page', value: 10 },
+            { name: '25 per page', value: 25 },
+            { name: '50 per page', value: 50 },
+            { name: 'Show All', value: 0 }
+        ]);
+        root.pageSizeSuite = ko.observable(root.pageSizesSuite()[0]);
+        root.pageIndexSuite = ko.observable(0);
+        root.previousPageSuite = function () {
+            if (root.pageIndexSuite() > 0) {
+                root.pageIndexSuite(root.pageIndexSuite() - 1);
+            }
+        };
+        root.nextPageSuite = function () {
+            if (root.pageIndexSuite() >= 0 && root.pageIndexSuite() < root.maxPageIndexSuite()) {
+                root.pageIndexSuite(root.pageIndexSuite() + 1);
+            }
+        };
+        root.gotoPageSuite = function (data) {
+            root.pageIndexSuite(data);
+        };
+
+        root.pagedSuiteResults = ko.computed(function () {
+            var size = (root.pageSizeSuite().value == 0) ? root.suiteResults().length : root.pageSizeSuite().value;
+            var start = root.pageIndexSuite() * size;
+            return root.suiteResults().slice(start, start + size);
+        }, root);
+
+        root.maxPageIndexSuite = ko.computed(function () {
+            if (root.pageSizeSuite().value == 0)
+                return 0;
+
+            return Math.ceil(root.suiteResults().length / root.pageSizeSuite().value - 1)
+        }, root);
+
+        root.toggleUserResults = function(){
+            var options = root.suiteOptions();
+            (options.isUserResults) ? options.isUserResults = false : options.isUserResults = true;
+            root.getMyTestResults(root.suiteQuery(), options, 'suiteResults', true);
+            root.isUserResults(options.isUserResults);
+        }
+
+
+        //###################scripts VVVV
+
+        root.pageSizesScript = ko.observable([
+            { name: '10 per page', value: 10 },
+            { name: '25 per page', value: 25 },
+            { name: '50 per page', value: 50 },
+            { name: 'Show All', value: 0 }
+        ]);
+        root.pageSizeScript = ko.observable(root.pageSizesScript()[0]);
+        root.pageIndexScript = ko.observable(0);
+        root.previousPageScript = function () {
+            if (root.pageIndexScript() > 0) {
+                root.pageIndexScript(root.pageIndexScript() - 1);
+            }
+        };
+        root.nextPageScript = function () {
+            if (root.pageIndexScript() >= 0 && root.pageIndexScript() < root.maxPageIndexScript()) {
+                root.pageIndexScript(root.pageIndexScript() + 1);
+            }
+        };
+        root.gotoPageScript = function (data) {
+            root.pageIndexScript(data);
+        };
+
+        root.pagedScriptResults = ko.computed(function () {
+            var size = (root.pageSizeScript().value == 0) ? root.scriptResults().length : root.pageSizeScript().value;
+            var start = root.pageIndexScript() * size;
+            return root.scriptResults().slice(start, start + size);
+        }, root);
+
+        root.maxPageIndexScript = ko.computed(function () {
+            if (root.pageSizeScript().value == 0)
+                return 0;
+
+            return Math.ceil(root.scriptResults().length / root.pageSizeScript().value - 1)
+        }, root);
+
+        root.toggleUserResultsScript = function(){
+            var options = root.scriptOptions();
+            (options.isUserResults) ? options.isUserResults = false : options.isUserResults = true;
+            root.getMyTestResults(root.scriptQuery(), options, 'scriptResults', true);
+            root.isUserResultsScript(options.isUserResults);
+        }
+
+        // #########################################
+        // AJAX REQUESTS - API REQUESTS
+        // #########################################
+
+        root.getMyTestResults = function (query, options, key, initialize) {
+            root.isLoadingResults(true); // trigger loading
+            // post request - pass query object & options
+            var data = {};
+            data.query = query;
+            data.options = options;
+            $.ajax({
+                type: 'POST',
+                url: '/api/test_results',
+                data: JSON.stringify(data),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    // mapping condition for converting json to viewmodel data
+                    var mapping = {};
+                    mapping[key] = {
+                        // create objects using Script model
+                        create: function (o) {
+                            return new TestResult(o.data);
+                        }
+                    }
+
+                    if (initialize) {
+                        root.availableUsers(result.map(function (item) { return item.runBy.name }).unique()); // get unique users from result
+                        var arr = [];
+                        arr = result.map(function (item) { return item.module }).unique(); // get unique modules from result
+                        var index = 0;
+                        arr.forEach(function (item){
+                            if (item == ""){
+                                arr.splice(index, 1);
+                                index --;
+                            }
+                            index ++;
+                        });
+                        var cycles = [];
+                        cycles = result.map(function (item) { return item.cycle}).unique();
+                        cycles = cycles.toString().split(",").unique();
+                        index = 0;
+                        cycles.forEach(function (item){
+                            if (item == ""){
+                                cycles.splice(index, 1);
+                                index --;
+                            }
+                            index ++;
+                        });
+
+                        if (key == 'suiteResults'){
+                            root.availableSuiteModules(arr);
+                            root.availableSuiteCycles(cycles);
+                        }
+                        if (key == 'scriptResults'){
+                            root.availableScriptModules(arr);
+                            root.availableScriptCycles(cycles);
+                        }
+                    }
+
+                    if (!initialize)
+                        if (result.length > 0) {
+                            root.isZeroResult(false);
+                            $('#advance-search-modal').modal('hide');
+                        } else {
+                            root.isZeroResult(true);
+                        }
+
+                    // foreach scripts from result, convert into script model and pass to pagedscript observableArray, in root (this) viewmodel
+                    var object = {};
+                    object[key] = result;
+                    ko.mapping.fromJS(object, mapping, root);
+                    root.isLoadingResults(false); // stop loading
+                }
+            });
+        };
+
+        root.advancedSearch = function (){
+            
+        };
+        
+        // #########################################
+        // INITIALIZATION
+        // #########################################
+
+        root.getMyTestResults(root.suiteQuery(), root.suiteOptions(), 'suiteResults', true);
+        root.getMyTestResults(root.scriptQuery(), root.scriptOptions(), 'scriptResults', true);
+        //root.getMyTestResults(); // get my test results
+
+        // #########################################
+        // BINDING HANDLERS
+        // #########################################
+
+        ko.bindingHandlers.filterForm = {
+            init: function (element, valueAccessor) {
+                // observables used for advanced search
+                root.aSearchResult = ko.observable('');
+                root.aSearchRunBy = ko.observableArray();
+                root.aSearchStatus = ko.observableArray();
+                root.aSearchFromDate = ko.observable();
+                root.aSearchToDate = ko.observable();
+                root.aSearchProjects = ko.observableArray();
+                root.aSearchModules = ko.observableArray();
+                root.aSearchCycles = ko.observableArray();
+
+                // extract data from array observable
+                function extract(key, array) {
+                    if (array.length > 0) { // if array is greater than 0
+                        var q = { $or: [] }; // create query $or condition
+                        array.forEach(function (criteria) {
+                            q.$or.push({ [key]: criteria }); // pass criteria
+                        })
+                        return q;
+                    }
+                    return null;
+
+                    // this functions generates query (ex.)
+                    // $or: [
+                    //  { project: 'new project' },
+                    //  { project: 'old project' }    
+                    // ]
+                };
+
+                function extractDate(key, dateRange) {
+                    if (!dateRange)
+                        return null;
+
+                    if (dateRange.includes('~')) {
+                        var ranges = dateRange.split('~');
+                        var first = ranges.shift();
+                        var last = ranges.pop();
+
+                        return { [key]: { $gt: first, $lt: last } };
+                    }
+                }
+
+                // when form is submitted
+                $(element).submit(function (event) {
+                    event.preventDefault(); // prevent page refresh
+                    var query = {}; // query to be filled by conditions
+
+                    var $and = []; // and condition
+
+                    if (root.aSearchResult() != '') { // generate regular expression query for script name if any
+                        $and.push({ testName: { $regex: root.aSearchResult(), $options: 'i' } });
+                    }
+
+                    var authorQ = extract('runBy.name', root.aSearchRunBy());
+                    if (authorQ) $and.push(authorQ); // generate $or query for author if any
+
+                    var projectQ = extract('projectName', root.aSearchProjects());
+                    if (projectQ) $and.push(projectQ);
+
+                    var moduleQ = extract('module', root.aSearchModules());
+                    if (moduleQ) $and.push(moduleQ);
+
+                    var cycleQ = extract('cycle', root.aSearchCycles());
+                    if (cycleQ) $and.push(cycleQ);
+
+                    var statusQ = extract('status', root.aSearchStatus());
+                    if (statusQ) $and.push(statusQ); // generate $or query for status if any
+
+                    var createdQ = extractDate('runDate', root.aSearchFromDate());
+                    if (createdQ) $and.push(createdQ);
+
+                    var updatedQ = extractDate('runDate', root.aSearchToDate());
+                    if (updatedQ) $and.push(updatedQ);
+
+                    if (root.advancedSearchType()) {
+                        var obj = {};
+                        (root.advancedSearchType() == 'Suite') ? obj = root.suiteQuery() : obj = root.scriptQuery();
+                        Object.keys(obj).forEach(function(key) {
+                             var o = {};
+                             o[key] = obj[key];
+                             $and.push(o);
+                        });
+                    }
+
+                    if ($and.length > 0) query = { $and: $and }; // if $and condition contains a condition, push to query
+
+                    //root.searchScenarios(query); // trigger query search & pass query
+                    root.getMyTestResults(query, (root.advancedSearchType().toLowerCase() == 'suite') ? root.suiteOptions() : root.scriptOptions(), (root.advancedSearchType().toLowerCase() == 'suite') ? 'suiteResults' : 'scriptResults');
+                })
+            }
+        };
+
+        ko.bindingHandlers.select2 = {
+            init: function (element, valueAccessor) {
+                var accessors = ko.unwrap(valueAccessor()); // variables passed from databinding
+                $(element).select2({
+                    placeholder: accessors.placeholder // placeholder from valueAccessor
+                }).on('change', function (event) { // if changed happened on select2
+                    if (event.added) // if change is adding
+                        accessors.observable.push(event.added.text); // add selected to observable from valueAccessor
+                    if (event.removed) // if change is removing
+                        accessors.observable.splice(accessors.observable().indexOf(event.removed.text), 1); // remove selected to observable from valueAccessor
+                });
+            }
+        };
+
+        root.createdSelectedRange = ko.observable();
+        root.createdSelectedDate = ko.observable();
+        root.updatedDateRanges = ko.computed(function () {
+            var obj = {
+                'Today': [moment(), moment()],
+                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                'This Month': [moment().startOf('month'), moment().endOf('month')],
+                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+            };
+
+            if (root.createdSelectedRange() == 'Today') {
+                return obj = {
+                    'Today': [moment(), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Yesterday') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 7 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 30 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                    'Last 30 Days': [moment().subtract(29, 'days'), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last Month') {
+                return obj = {
+                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'This Month') {
+                return obj = {
+                    'This Month': [moment().startOf('month'), moment().endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Custom Range') {
+                return obj = {};
+            }
+
+            return obj;
+        });
+
+        ko.bindingHandlers.datePicker = {
+            init: function (element, valueAccessor) {
+                $(element).daterangepicker({
+                    locale: {
+                        cancelLabel: 'Clear'
+                    },
+                    ranges: {
+                        'Today': [moment(), moment()],
+                        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                        'This Month': [moment().startOf('month'), moment().endOf('month')],
+                        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                    },
+                    drops: 'down',
+                    opens: 'center',
+                    minDate: '01/01/2017',
+                    maxDate: moment()
+                });
+
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+
+                $(element).on('apply.daterangepicker', function (event, picker) {
+                    if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                        $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")}`);
+                    } else {
+                        $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                    }
+
+                    if (pickerType == 'Created') {
+                        if (picker.chosenLabel == 'Custom Range')
+                            root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                        root.createdSelectedRange(picker.chosenLabel);
+                        root.aSearchToDate(undefined);
+                    }
+
+                    root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                });
+
+                $(element).on('cancel.daterangepicker', function (event, picker) {
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                    root[observable](undefined);
+                });
+            },
+            update: function (element, valueAccessor) {
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+                if (!root[observable]())
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+
+                if (pickerType == 'Updated') {
+                    var min;
+                    var max;
+                    if (root.createdSelectedRange() == 'Custom Range') {
+                        var range = root.createdSelectedDate().split('~');
+                        min = range.shift();
+                        max = range.pop();
+                    }
+                    $(element).daterangepicker({
+                        locale: {
+                            cancelLabel: 'Clear'
+                        },
+                        ranges: root.updatedDateRanges(),
+                        drops: 'down',
+                        opens: 'center',
+                        minDate: (min) ? moment(min) : '01/01/2017',
+                        maxDate: (max) ? moment(max) : moment()
+                    });
+
+                    var pickerType = $(element).data('picker-date');
+                    var observable = $(element).data('picker-observable');
+
+                    $(element).on('apply.daterangepicker', function (event, picker) {
+                        if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                            $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")}`);
+                        } else {
+                            $($(element).find('span')).html(`${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                        }
+
+                        if (pickerType == 'Created') {
+                            if (picker.chosenLabel == 'Custom Range')
+                                root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                            root.createdSelectedRange(picker.chosenLabel);
+                            root.aSearchToDate(undefined);
+                        }
+
+                        root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                    });
+
+                    $(element).on('cancel.daterangepicker', function (event, picker) {
+                        $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                        root[observable](undefined);
+                    });
+                }
+            }
+        };
+
+        ko.bindingHandlers.returnAction = {
+            init: function (element, valueAccessor) {
+                $(element).keydown(function (e) { // listen to keydown (keyboard press) event
+                    if (e.which === 13) { // if user pressed 'enter' 
+                        var observable = valueAccessor(); // get observable from valueAccessor
+                        observable(); // trigger observable
+                    }
+                });
+            }
+        };
+    };
+
+    // #########################################
+    // APPLY BINDINGS :)
+    // #########################################
+    ko.applyBindings(new ViewTestResults(), document.getElementById('wrapper-content'));
+
+</script>

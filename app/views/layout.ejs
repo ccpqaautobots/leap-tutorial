@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <% include ./partials/shared/head %>
+        <script src="/js/plugins/moment/moment.min.js" type="text/javascript"></script>
+        <style>
+            .clearLoading {
+                display: none !important;
+            }
+
+            .slow-spin {
+                webkit-animation: fa-spin 2s infinite linear;
+                animation: fa-spin 9999999ms infinite linear;
+            }
+        </style>
+</head>
+
+<body <% if (user && user.preferences && (user.preferences.sidebarMenuExpand)) { %>class="mini-navbar" <% } else { %> class="" <% } %> >
+    <div id="wrapper">
+        <% include ./partials/shared/sidebar %>
+
+            <div id="page-wrapper" class="gray-bg dashbard-1">
+                <div class="row border-bottom">
+                    <% include ./partials/shared/header %>
+                </div>
+                <% if (renderBreadcrumbs) {  %>
+                    <%- include(renderBreadcrumbs, {}) %>
+                <% } %>
+                <div id="wrapper-content" class="wrapper wrapper-content">
+                    <% if (renderContent) {  %>
+                        <%- include(renderContent, {}) %>
+                    <% } %>
+                </div>
+                <div class="footer">
+                    <div class="pull-right">
+                        Version <strong>0.1.9</strong> Beta
+                    </div>
+                    <div>
+                        <strong>Leap Automation</strong>
+                    </div>
+                </div>
+            </div>
+            <% include ./partials/shared/extensions %>
+            <!--<% include ./partials/content/indexchat %>-->
+            <% include ./partials/shared/rightsidebar %>
+    </div>
+
+    <% if (renderScripts) {  %>
+        <%- include(renderScripts, {}) %>
+    <% } %>
+
+    <script>
+        function HeaderViewModel() {
+            var root = this;
+
+            root.searchInput = ko.observable();
+
+            ko.bindingHandlers.headerSearchForm = {
+                init: function(element, valueAccessor) {
+                    $(element).submit(function() {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/api/chat',
+                            data: JSON.stringify({ t: root.searchInput() }),
+                            contentType: 'application/json; charset=utf8',
+                            dataType: 'json',
+                            success: function (result) {
+                                if (result.action == 'redirect') {
+                                    window.location.href = result.to;
+                                } else if (result.action == 'create') {
+                                    window.location.href = result.to;
+                                }
+                            }
+                        })
+                        return false;
+                    })
+                }
+            };
+
+            root.toggleSidebarMenu = function() {
+                 $.ajax({
+                    type: 'GET',
+                    url: '/api/preferences/sidebarmenu_toggle',
+                    success: function (result) {
+                        
+                    }
+                });
+            }; 
+        };
+
+        if ($('#header').length)
+            ko.applyBindings(new HeaderViewModel(), document.getElementById('header'));
+    </script>
+
+    <% include ./partials/shared/trellomodal %>
+    <% include ./partials/shared/trelloscripts %>
+    <% include ./partials/shared/scripts %>
+    <% if (reload) { %>
+    <!-- Reload -->
+    <script src="/reload/reload.js"></script>
+    <% } %>
+</body>
+
+</html>

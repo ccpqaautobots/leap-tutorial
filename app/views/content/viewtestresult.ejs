@@ -1,0 +1,309 @@
+<script src="/js/plugins/chartJs/Chart.min.js"></script>
+<style>
+    .scroll-overflow-x {
+        overflow-x: auto;
+    }
+
+    .clearLoading {
+        display: none !important;
+    }
+
+    .center {
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
+
+    pre {
+        background: #303030;
+        color: #f1f1f1;
+        line-height: 0.5 !important;
+        padding: 10px 16px;
+        border-radius: 2px;
+        border-top: 4px solid #00aeef;
+        -moz-box-shadow: inset 0 0 10px #000;
+        box-shadow: inset 0 0 10px #000;
+        counter-reset: line;
+    }
+
+    pre span {
+        display: block;
+        line-height: 1.0rem;
+    }
+
+    pre span:before {
+        counter-increment: line;
+        content: counter(line);
+        display: inline-block;
+        border-right: 1px solid #ddd;
+        padding: 0 .5em;
+        margin-right: .5em;
+        color: #888
+    }
+
+    .invalid-field {
+        border: 1px solid red;
+    }
+</style>
+<div id="wrapper-content" class="wrapper wrapper-content">
+    <div class="row m-b">
+        <div class="col-lg-12">
+            <div class="pull-right">
+                <button class="btn btn-primary" data-bind="click: $root.triggerEdit, visible: !$root.editing()"><i class="fa fa-pencil"></i>&nbsp;&nbsp;Edit Results</button>
+                <button class="btn btn-primary" data-bind="click: $root.cancelEdit, visible: $root.editing()"><i class="fa fa-times"></i>&nbsp;&nbsp;Cancel</button>
+                <button class="btn btn-primary" data-bind="click: $root.triggerSaveConfirmation, visible: $root.editing(), disable: $root.disableSaving"><i class="fa fa-floppy-o"></i>&nbsp;&nbsp;Save</button>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox-content">
+                <div class="tabs-container">
+                    <ul class="nav nav-tabs">
+                        <li class="active"><a data-toggle="tab" href="#tab-1" aria-expanded="true">Info</a></li>
+                        <li data-bind="if: $root.testresult().isScript()"><a data-toggle="tab" href="#tab-2" aria-expanded="false">Scenarios</a></li>
+                        <li data-bind="if: $root.testresult().isSuite() && !$root.testresult().isScript()"><a data-toggle="tab" href="#tab-3" aria-expanded="false">Scripts</a></li>
+                        <li><a data-toggle="tab" href="#tab-4" aria-expanded="false">Logs</a></li>
+                    </ul>
+                    <div class="tab-content">
+                        <div id="tab-1" class="tab-pane active">
+                            <div class="panel-body">
+                                <div class="col-sm-8">
+                                    <label>Run Id:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult()._id"></span><br/>
+                                    <label>Project Name:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().projectName"></span><br/>
+                                    <label>Sub Project:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().subProject"></span><br/>
+                                    <label>Test Name:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().testName"></span><br/>
+                                    <label>Date:</label>&nbsp;&nbsp;<span data-bind="html: $root.formatDate($root.testresult().runDate)"></span><br/>
+                                    <label>Status:</label>&nbsp;&nbsp;<span data-bind="html: ($root.testresult().done()) ? $root.testresult().status : 'Running'"></span><br/>
+                                    <label>Total Passed:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().totalPassed"></span><br/>
+                                    <label>Total Failed:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().totalFailed"></span><br/>
+                                    <label>Total Warning:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().totalWarning"></span><br/>
+                                    <label>Total:</label>&nbsp;&nbsp;<span data-bind="html: $root.testresult().total"></span><br/>
+                                    <label>Duration:</label>&nbsp;&nbsp;<span data-bind="html: $root.convertToTime($root.testresult().duration()) + ' (' + $root.testresult().duration() + ' ms)'"></span><br/>
+                                </div>
+                                <div class="col-sm-4">
+                                    <canvas data-bind="statsChart, visible: $root.testresult().done"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="tab-2" class="tab-pane" data-bind="if: $root.testresult().isScript()">
+                            <div class="panel-body">
+                                <div class="pull-right">
+                                    <button class="btn btn-primary btn-outline" data-bind="click: $root.expandAll">Expand All</button>
+                                    <button class="btn btn-warning btn-outline" data-bind="click: $root.collapseAll">Collapse All</button>
+                                </div>
+                                <div class="tabs-container">
+                                    <ul class="nav nav-tabs">
+                                        <li class="active"><a data-toggle="tab" href="#stab-1" aria-expanded="true">Tabular View</a></li>
+                                        <li><a data-toggle="tab" href="#stab-2" aria-expanded="false">Descriptive View</a></li>
+                                    </ul>
+                                    <div class="tab-content">
+                                        <div id="stab-1" class="tab-pane active">
+                                            <div class="panel-body">
+                                                <div data-bind="foreach: $root.testresult().scenarios">
+                                                    <div class="ibox float-e-margins">
+                                                        <div class="ibox-title">
+                                                            <h5><span data-bind="html: $root.customScenarioTitle($data, $index)"></span>&nbsp;-&nbsp;
+                                                                <span class="text-info" data-bind="html: $root.convertToTime($data.duration()) + ' (' + $data.duration() + ' ms)'"></span>
+                                                            </h5>
+                                                            <div class="ibox-tools">
+                                                                <a class="collapse-link">
+                                                                    <i class="fa fa-chevron-up"></i>
+                                                                </a>
+                                                                <a class="fullscreen-link">
+                                                                    <i class="fa fa-expand"></i>
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                        <div class="ibox-content collapse scroll-overflow-x">
+                                                            <table class="table table-striped table-bordered table-hover fit-table">
+                                                                <thead>
+                                                                    <th>Option</th>
+                                                                    <th>Page</th>
+                                                                    <th>Action</th>
+                                                                    <th>Object</th>
+                                                                    <th>Test Data</th>
+                                                                    <th>Message</th>
+                                                                    <th>Assertions</th>
+                                                                    <th>Status</th>
+                                                                </thead>
+                                                                <tbody data-bind="foreach: $data.steps">
+                                                                    <tr>
+                                                                        <td data-bind="html: $data.option"></td>
+                                                                        <td data-bind="html: $data.page"></td>
+                                                                        <td data-bind="html: $data.action"></td>
+                                                                        <td data-bind="html: $data.object"></td>
+                                                                        <td data-bind="html: $data.testData"></td>
+                                                                        <td data-bind="html: $data.message"></td>
+                                                                        <td><a href="#" data-bind="text: $data.assertions().length + ' assertions', click: function() { $parent.viewAssertion($index()) }"></a></td>
+                                                                        <td data-bind="html: ($data.isFailure()) ? 'Failed' : 'Passed', css: { 'text-danger': $data.isFailure(), 'text-navy': !$data.isFailure() }"></td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                            <div data-bind="visible: ($data.selectedStepAssertions()) ? true : false" class="scroll-overflow-x">
+                                                                <h4 data-bind="text: 'Assertions of step ' + ($data.selectedStepIndex() + 1)"></h4>
+                                                                <table class="table table-striped table-bordered table-hover fit-table">
+                                                                    <thead>
+                                                                        <th>Page</th>
+                                                                        <th>Element</th>
+                                                                        <th>Assertion</th>
+                                                                        <th>Attribute</th>
+                                                                        <th>Expected</th>
+                                                                        <th>Message</th>
+                                                                        <th>Status</th>
+                                                                    </thead>
+                                                                    <tbody data-bind="foreach: $data.selectedStepAssertions">
+                                                                        <tr>
+                                                                            <td data-bind="html: $data.page"></td>
+                                                                            <td data-bind="html: $data.element"></td>
+                                                                            <td data-bind="html: $data.assertion"></td>
+                                                                            <td data-bind="html: $data.attribute"></td>
+                                                                            <td data-bind="html: $data.expected"></td>
+                                                                            <td data-bind="html: $data.message"></td>
+                                                                            <td data-bind="html: ($data.isFailure()) ? 'Failed' : 'Passed', css: { 'text-danger': $data.isFailure(), 'text-navy': !$data.isFailure() }"></td>
+                                                                        </tr>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="stab-2" class="tab-pane">
+                                            <div class="panel-body">
+                                                <div data-bind="foreach: $root.testresult().scenarios">
+                                                    <div class="ibox float-e-margins">
+                                                        <div class="ibox-title">
+                                                            <h5><span data-bind="html: $root.customScenarioTitle($data, $index)"></span>&nbsp;-&nbsp;
+                                                                <span class="text-info" data-bind="html: $root.convertToTime($data.duration()) + ' (' + $data.duration() + ' ms)'"></span>
+                                                            </h5>
+                                                            <div class="ibox-tools">
+                                                                <a class="collapse-link">
+                                                                    <i class="fa fa-chevron-up"></i>
+                                                                </a>
+                                                                <a class="fullscreen-link">
+                                                                    <i class="fa fa-expand"></i>
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                        <div class="ibox-content collapse">
+                                                            <ul data-bind="foreach: $data.steps()" style="padding-left: 40px">
+                                                                <li data-bind="html: $root.describeAction($data)"></li>
+                                                                <ul data-bind="foreach: $data.assertions" style="padding-left: 40px">
+                                                                    <li data-bind="html: $root.describeAssertion($parent, $data)"></li>
+                                                                </ul>
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="tab-3" class="tab-pane" data-bind="if: $root.testresult().isSuite()">
+                            <div class="panel-body scroll-overflow-x" data-bind="template: ($root.editing()) ? 'suite-scripts-editable' : 'suite-scripts-static'">
+                                <!-- INSERT TEMPLATE HERE -->
+                            </div>
+                        </div>
+                        <div id="tab-4" class="tab-pane">
+                            <div class="panel-body">
+                                <pre data-bind="foreach: $root.testresult().logsFormatted">
+                                    <span data-bind="html: $data"></span>
+                                </pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- modals -->
+    <div id="save-confirmation-modal" class="modal fade" role="dialog" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="panel panel-warning">
+                <div class="panel-heading center">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h2><i class="fa fa-warning"></i>&nbsp;<span>Confirmation</span></h2>
+                </div>
+                <div class="panel-body p-xl" data-bind="with: $root.testresult">
+                    <p>Are you sure?</p>
+                </div>
+                <div class="panel-footer text-right">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" data-dismiss="modal" data-bind="click: $root.save">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<!-- ./wrapper-content -->
+
+<script id="suite-scripts-static" type="text/html">
+    <table class="table table-striped table-bordered table-hover fit-table">
+        <thead>
+            <tr>
+                <th>Test Name</th>
+                <th>Project Name</th>
+                <th>Module</th>
+                <th>Status</th>
+                <th>Run Date</th>
+                <th>Cause of failure</th>
+                <th>Remarks</th>
+            </tr>
+        </thead>
+        <tbody data-bind="foreach: $root.testresult().scriptsResults">
+            <tr class="gradeX">
+                <td><a data-bind="attr: { href: '/execution/testresults/suite/' + $root.testresult()._id() + '/script/' + $data._id() }, html: $data.testName()"></a></td>
+                <td data-bind="text: $data.projectName"></td>
+                <td data-bind="text: $data.module"></td>
+                <td data-bind="text: $data.status, css: { 'text-danger': $data.done() && ($data.status() == 'Failed'), 'text-navy': $data.done() && ($data.status() == 'Passed'), 'text-warning': $data.done() && ($data.status() == 'Warning') }"></td>
+                <td data-bind="text: $root.formatDate($data.runDate)"></td>
+                <td data-bind="text: $data.failureCause"></td>
+                <td data-bind="text: $data.remarks"></td>
+            </tr>
+        </tbody>
+    </table>
+</script>
+
+<script id="suite-scripts-editable" type="text/html">
+    <table class="table table-striped table-bordered table-hover fit-table">
+        <thead>
+            <tr>
+                <th>Run Id</th>
+                <th>Project Name</th>
+                <th>Sub Project</th>
+                <th>Test Name</th>
+                <th>
+                    <span class="pull-left">Status</span>
+                    <span class="pull-right">
+                        <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="top" title="Remarks are required if status is changed"></i>
+                    </span>
+                    <div style="clear: both;"></div>
+                </th>
+                <th>
+                    <span class="pull-left">Cause of failure</span>
+                    <span class="pull-right">
+                        <i class="fa fa-question-circle" data-toggle="tooltip" data-placement="top" title="Setting a failure reason to 'Script Error' will automatically set the script to 'Maintenance'"></i>
+                    </span>
+                    <div style="clear: both;"></div>
+                </th>
+                <th>Remarks</th>
+            </tr>
+        </thead>
+        <tbody data-bind="foreach: $root.testresult().scriptsResults">
+            <tr class="gradeX">
+                <td><a data-bind="attr: { href: '/execution/testresults/suite/' + $root.testresult()._id() + '/script/' + $data._id() }, html: $data._id()"></a></td>
+                <td data-bind="text: $data.projectName"></td>
+                <td data-bind="text: $data.subProject"></td>
+                <td data-bind="text: $data.testName"></td>
+                <td><select data-bind="options: $root.statuses, optionsText: 'name', value: $data.selectedStatus"></select></td>
+                <td><select data-bind="options: $root.failureCauses, optionsText: 'name', value: $data.selectedFailureCause, disable: ($data.status() != 'Failed'), , css: { 'invalid-field': $data.isValid() == 2 }"></select></td>
+                <td><textarea rows="1" data-bind="value: $data.remarks, css: { 'invalid-field': $data.isValid() == 3 }"></textarea></td>
+            </tr>
+        </tbody>
+    </table>
+</script>

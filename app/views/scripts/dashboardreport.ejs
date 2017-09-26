@@ -1,0 +1,240 @@
+<!-- ChartJS-->
+<script src="/js/plugins/chartJs/Chart.min.js"></script>
+
+<script>
+    var _project = <%- JSON.stringify(project) %>;
+
+    function DashboardViewModel() {
+        var root = this;
+
+        // #########################################
+        // MODELS - FOR EASY DATA MANIPULATION
+        // #########################################
+        function Metrics(metrics) {
+            var _metrics = this;
+
+            _metrics.duration = (metrics) ? metrics.duration || 0 : 0;
+            _metrics.total = (metrics) ? metrics.total || 0 : 0;
+            _metrics.totalPassed = (metrics) ? metrics.totalPassed || 0 : 0;
+            _metrics.totalFailed = (metrics) ? metrics.totalFailed || 0 : 0;
+            _metrics.totalWarning = (metrics) ? metrics.totalWarning || 0 : 0;
+            _metrics.rates = {
+                passing: (metrics) ? metrics.rates.passing || 0 : 0,
+                failure: (metrics) ? metrics.rates.failure || 0 : 0
+            };
+        };
+
+        // #########################################
+        // DATA VARIABLES
+        // #########################################
+        root.today = ko.observable(new Metrics());
+        root.yesterday = ko.observable(new Metrics());
+        root.thisWeek = ko.observable(new Metrics());
+        root.lastWeek = ko.observable(new Metrics());
+        root.thisMonth = ko.observable(new Metrics());
+        root.lastMonth = ko.observable(new Metrics());
+
+        root.thisMonthDaily = ko.observableArray();
+
+        root.sanityDuration = [{ label: '1', duration: 4320000 }, { label: '2', duration: 4800000 }, { label: '3', duration: 5400000 }, { label: '4', duration: 4020000 }, { label: '5', duration: 3960000 }, { label: '6', duration: 3780000 }, { label: '7', duration: 3900000 }];
+        root.regressionDuration = [{ label: '1', duration: 5280000 }, { label: '2', duration: 4860000 }, { label: '3', duration: 4740000 }, { label: '4', duration: 5100000 }, { label: '5', duration: 4980000 }, { label: '6', duration: 4860000 }, { label: '7', duration: 4800000 }]
+        root.sanityResults = [{ label: 'Books', passed: 80, failed: 20 }, { label: 'Journals', passed: 90, failed: 10 }, { label: 'Bespoke', passed: 100, failed: 0 }, { label: 'Major products', passed: 85, failed: 15 }, { label: 'Publishers', passed: 98, failed: 2 }, { label: 'Sales module', passed: 99, failed: 1 }];
+        root.regressionResults = [{ label: 'Books', passed: 128, failed: 35 }, { label: 'Journals', passed: 74, failed: 35 }, { label: 'Bespoke', passed: 84, failed: 12 }, { label: 'Major products', passed: 211, failed: 18 }, { label: 'Publishers', passed: 45, failed: 7 }, { label: 'Sales module', passed: 94, failed: 23 }];
+        root.maintenanceTrend = [{ label: 'Week 1', scripts: 12 }, { label: 'Week 2', scripts: 27 }, { label: 'Week 3', scripts: 21 }, { label: 'Week 4', scripts: 4 }]
+        // #########################################
+        // UI VARIABLES
+        // #########################################
+        root.getRate = function (value) {
+            if (value >= 90 && value <= 100) {
+                return 'Excellent';
+            } else if (value >= 70 && value <= 89) {
+                return 'Average';
+            } else if (value < 70) {
+                return 'Poor';
+            } else {
+                return undefined;
+            }
+        };
+
+        function AddZeroAtStart(value) {
+            if (value.toString().length == 1) {
+                return '0' + value;
+            } else {
+                return value;
+            }
+        };
+
+        root.formatTime = function (value, in_hours, in_minutes, in_seconds, only) {
+            var duration = moment.duration(value);
+
+            if (only) {
+                if (in_hours)
+                    return duration.hours();
+                if (in_minutes)
+                    return duration.minutes();
+                if (in_seconds)
+                    return duration.seconds();
+            } else {
+                return AddZeroAtStart(duration.hours()) + ':'
+                    + AddZeroAtStart(duration.minutes()) + ':'
+                    + AddZeroAtStart(duration.seconds());
+            }
+        };
+
+        // initialization
+        $.ajax({
+            type: 'POST',
+            url: '/api/dashboard/' + _project.projectKey,
+            data: {},
+            contentType: 'application/json; charset=utf-8',
+            dataType: 'json',
+            success: function (result) {
+                if (result) {
+                    for (var key in result.stats) {
+                        if (result.stats.hasOwnProperty(key)) {
+                            var mapping = {
+                                [key]: {
+                                    create: function (options) {
+                                        return new Metrics(options.data);
+                                    }
+                                }
+                            }
+
+                            var mappingData = { [key]: result.stats[key] };
+                            ko.mapping.fromJS(mappingData, mapping, root);
+                        }
+                    }
+
+                    for (var key in result.dailyStats) {
+                        if (result.dailyStats.hasOwnProperty(key)) {
+                            var data = [];
+                            for (var i_key in result.dailyStats[key]) {
+                                if (result.dailyStats[key].hasOwnProperty(i_key)) {
+                                    var obj = {
+                                        day: parseInt(i_key),
+                                        stats: new Metrics(result.dailyStats[key][i_key])
+                                    };
+                                    data.push(obj);
+                                }
+                            }
+                            root[key + "Daily"](data);
+                        }
+                    }
+                }
+            }
+        });
+
+        // Return with commas in between
+        var numberWithCommas = function (x) {
+            return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        };
+
+        ko.bindingHandlers.barGraph = {
+            init: function (element, valueAccessor) {
+                var accessor = ko.unwrap(valueAccessor());
+                accessor.forEach(function (data, index) {
+                    var total = data.passed + data.failed;
+                    accessor[index].percentage = parseInt(((data.passed / total) * 100).toFixed(0));
+                });
+                new Chart($(element), {
+                    type: 'bar',
+                    data: {
+                        labels: accessor.map(_ => _.label),
+                        datasets: [{
+                            type: 'bar',
+                            label: 'Passed',
+                            backgroundColor: "darkseagreen",
+                            data: accessor.map(_ => _.percentage)
+                        }, {
+                            type: 'bar',
+                            label: 'Failed',
+                            backgroundColor: "lightcoral",
+                            data: accessor.map(function (x) {
+                                return Math.abs(x.percentage - 100)
+                            })
+                        }]
+                    },
+                    options: {
+                        animation: {
+                            duration: 10,
+                        },
+                        tooltips: {
+                            mode: 'label',
+                            callbacks: {
+                                label: function (tooltipItem, data) {
+                                    return data.datasets[tooltipItem.datasetIndex].label + ": " + tooltipItem.yLabel;
+                                }
+                            }
+                        },
+                        scales: {
+                            xAxes: [{
+                                stacked: true,
+                                gridLines: { display: false },
+                            }],
+                            yAxes: [{
+                                stacked: true,
+                                ticks: {
+                                    callback: function (value) { return value; },
+                                },
+                            }],
+                        },
+                        legend: { display: true }
+                    }
+                });
+            }
+        };
+
+        ko.bindingHandlers.lineGraph = {
+            init: function (element, valueAccessor) {
+                var accessor = ko.unwrap(valueAccessor());
+                new Chart($(element), {
+                    type: 'line',
+                    data: {
+                        labels: accessor.labels,
+                        datasets: [
+                            {
+                                label: accessor.legend,
+                                fill: false,
+                                lineTension: 0.1,
+                                backgroundColor: "rgba(75,192,192,0.4)",
+                                borderColor: "rgba(75,192,192,1)",
+                                borderCapStyle: 'butt',
+                                borderDash: [],
+                                borderDashOffset: 0.0,
+                                borderJoinStyle: 'miter',
+                                pointBorderColor: "rgba(75,192,192,1)",
+                                pointBackgroundColor: "#fff",
+                                pointBorderWidth: 1,
+                                pointHoverRadius: 5,
+                                pointHoverBackgroundColor: "rgba(75,192,192,1)",
+                                pointHoverBorderColor: "rgba(220,220,220,1)",
+                                pointHoverBorderWidth: 2,
+                                pointRadius: 1,
+                                pointHitRadius: 10,
+                                data: accessor.data,
+                                spanGaps: false,
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [
+                                {
+                                    ticks: {
+                                        callback: function (label, index, labels) {
+                                            return label + ((accessor.options._yAxes_label) ? accessor.options._yAxes_label : '');
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        legend: false
+                    }
+                })
+            }
+        };
+    };
+
+    ko.applyBindings(new DashboardViewModel(), document.getElementById('wrapper-content'));
+
+</script>

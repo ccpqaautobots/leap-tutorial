@@ -1,0 +1,300 @@
+<script>
+    jQuery.validator.addMethod("unique", function(value, element, params) {
+        console.log('params:');
+        console.log(params);
+        var d = { key: params[0], errors: params[1] };
+        console.log('value: ' + value);
+        console.log('element: ' + element);
+        if (Array.isArray(d.errors)) {
+            console.log('isArray');
+            if (d.errors.some(_ => _.startsWith(key))) {
+                console.log('matchFound');
+                console.log(d.errors.some(_ => _.startsWith(key)[0]));
+            }
+        }
+        return true;
+    });
+
+    function ProjectManagementViewModel() {
+        var root = this;
+
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, title || 'Project Management');
+            }, 500);
+        }
+
+        root.userType = ko.observable((<%= user.isSuper %>) ? 'super' : 'admin');
+
+        // #########################################
+        // MODELS
+        // #########################################
+
+        function Project(project) {
+            var _project = this;
+
+            _project._id = ko.observable((project) ? project._id || undefined : undefined);
+            _project.createdDate = ko.observable((project) ? project.createdDate || undefined : undefined);
+            _project.updatedDate = ko.observable((project) ? project.updatedDate || undefined : undefined);
+            _project.projectKey = ko.observable((project) ? project.projectKey || undefined : undefined);
+            _project.name = ko.observable((project) ? project.name || undefined : undefined).extend({ notify: 'always' });
+            _project.environments = ko.observableArray([]);
+
+            // extras
+            _project.selectedRadio = ko.observable(0).extend({ notify: 'always' });
+
+            // bind subscriptions before initializing other data
+            _project.name.subscribe(function (newValue) {
+                var words = newValue.split(/\s+/);
+                var abbrev = words.map(function(word) {
+                    return word.trim()[0];
+                });
+                _project.projectKey(abbrev.join(''));
+            });
+
+            _project.environments.subscribe(function () {
+                if (_project.environments()[_project.selectedRadio()] == undefined)
+                    _project.selectedRadio(0);
+            });
+
+            _project.selectedRadio.subscribe(function (newIndex) {
+                _project.environments().forEach(function (environment) {
+                    environment.default(false);
+                });
+
+                if (_project.environments()[newIndex])
+                    _project.environments()[newIndex].default(true);
+            });
+
+            // initialize environments
+            if (project && project.environments) {
+                var mapping = {
+                    'environments': {
+                        create: function (options) {
+                            return new Environment(options.data);
+                        }
+                    }
+                };
+
+                ko.mapping.fromJS({ environments: project.environments }, mapping, _project);
+                var index = _project.environments().indexOf(_project.environments().filter(_ => _.default() == true)[0]);
+                _project.selectedRadio(index);
+            }
+
+            // class functions
+            _project.addEnvironment = function () {
+                _project.environments.push(new Environment(undefined, true));
+            }
+
+            _project.removeEnvironment = function (index) {
+                _project.environments.splice(index(), 1);
+            }
+        }
+
+        function Environment(environment, isNew) {
+            var _environment = this;
+
+            _environment._id = ko.observable((environment) ? environment._id || undefined : undefined);
+            _environment.name = ko.observable((environment) ? environment.name || undefined : undefined);
+            _environment.url = ko.observable((environment) ? environment.url || undefined : undefined);
+            _environment.default = ko.observable((environment) ? environment.default || false : false);
+
+            // extras
+            _environment.editing = ko.observable(isNew || false);
+
+            // class functions
+            _environment.editEnvironment = function () {
+                _environment.editing(!_environment.editing());
+            }
+        }
+
+        // #########################################
+        // DATA
+        // #########################################
+
+        root.projects = ko.observableArray([]); // list of projects
+        root.deletedProjects = ko.observableArray([]); // store deleted projects
+        root.selectedProject = ko.observable(); // selected project, for editing
+        root.editingProject = ko.observable(false); // trigger for editing or creating projects
+        root.validationErrors = ko.observableArray([]);
+
+        // #########################################
+        // FUNCTIONS
+        // #########################################
+
+        root.deleteProject = function (index) {
+            if (typeof index == 'function') {
+                var projectForDeletion = root.projects()[index()];
+                $.ajax({
+                    type: 'DELETE',
+                    url: '/api/project/' + projectForDeletion._id(),
+                    statusCode: {
+                        204: function () {
+                            // store deleted project, for undo implementation
+                            var deleted = root.projects.splice(index(), 1);
+                            deleted.forEach(function (project) {
+                                root.deletedProjects.push(project);
+                            });
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(error);
+                    }
+                });
+            }
+        };
+
+        // triggers, create project button & edit button
+        root.openProjectEditor = function (index) {
+            // if index is provided, load existing project for editing
+            if (typeof index == 'function') {
+                root.selectedProject(root.projects()[index()]);
+                root.editingProject(true);
+            } else {
+                // if no index is provided
+                var project = new Project(); // create a new project
+                project.addEnvironment(); // trigger add environment
+                root.selectedProject(project);
+                root.editingProject(false);
+            }
+
+            $('#project-modal').modal('show'); // display modal
+        };
+
+        // triggers, close button & 'X' button from modal
+        root.closeProjectEditor = function () {
+            root.selectedProject(undefined); // clear selectedproject
+            $('#project-modal').modal('hide'); // hide modal
+        };
+
+        // #########################################
+        // INITIALIZE PROJECT
+        // #########################################
+
+        $.ajax({
+            type: 'POST',
+            url: '/api/getProjects',
+            data: JSON.stringify({ query: {} }),
+            contentType: 'application/json; charset=utf8',
+            dataType: 'json',
+            statusCode: {
+                200: function (response) {
+                    var mapping = {
+                        'projects': {
+                            create: function (options) {
+                                return new Project(options.data);
+                            }
+                        }
+                    };
+
+                    ko.mapping.fromJS({ projects: response }, mapping, root);
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error(error);
+            }
+        });
+
+        // #########################################
+        // BINDING HANDLERS
+        // #########################################
+
+        ko.bindingHandlers.validate = {
+            update: function (element, valueAccessor) {
+                var value = ko.unwrap(valueAccessor());
+                console.log('before validation: ');
+                console.log(value.errors());
+                $(element).validate({
+                    errorClass: 'error jquery-invalid',
+                    rules: {
+                        projectname: {
+                            required: true,
+                            unique: ['name', root.validationErrors()]
+                        },
+                        projectkey: {
+                            required: true,
+                            unique: ['projectKey', root.validationErrors()]
+                        }
+                    },
+                    messages: {
+                        projectname: {
+                            required: 'Project name is required.'
+                        },
+                        projectKey: {
+                            required: 'Project key is required.'
+                        }
+                    }
+                })
+            }
+        };
+
+        ko.bindingHandlers.projectForm = {
+            init: function (element, valueAccessor) {
+                $(element).submit(function (e) {
+                    e.preventDefault();
+
+                    // if project has id, which means project already exists, do update
+                    if (root.selectedProject()._id()) {
+                        $.ajax({
+                            type: 'PUT',
+                            url: '/api/project/' + root.selectedProject()._id(),
+                            data: ko.toJSON(root.selectedProject),
+                            contentType: 'application/json; charset=utf8',
+                            dataType: 'json',
+                            statusCode: {
+                                200: function (response) {
+                                    toastrTrigger('Project was updated successfully.');
+                                    // if project exists
+                                    if (root.projects().some(_ => _._id() == response._id)) {
+                                        // update project using the server response & close modal
+                                        root.projects().filter(_ => _._id() == response._id)[0] = new Project(response);
+                                        root.closeProjectEditor();
+                                    }
+                                }
+                            },
+                            error: function (xhr, status, error) {
+                                if (Array.isArray(xhr.responseJSON.errors)) {
+                                    root.validationErrors(xhr.responseJSON.errors);
+                                    $('#project-form').valid();
+                                }
+                            }
+                        });
+                    } else {
+                        $.ajax({
+                            type: 'POST',
+                            url: '/api/project',
+                            data: ko.toJSON(root.selectedProject),
+                            contentType: 'application/json; charset=utf8',
+                            dataType: 'json',
+                            statusCode: {
+                                201: function (response) {
+                                    // push new project to project lists & close modal
+                                    root.projects.push(new Project(response));
+                                    toastrTrigger('Project was created successfully.');
+                                    root.closeProjectEditor();
+                                }
+                            },
+                            error: function (xhr, status, error) {
+                                if (Array.isArray(xhr.responseJSON.errors)) {
+                                    console.log('errors was received: ');
+                                    console.log(xhr.responseJSON.errors);
+                                    root.validationErrors(xhr.responseJSON.errors);
+                                    $('#project-form').valid();
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        }
+    }
+
+    ko.applyBindings(new ProjectManagementViewModel(), document.getElementById('wrapper-content'));
+
+</script>

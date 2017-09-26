@@ -1,0 +1,125 @@
+<style>
+	.trello-validation {
+		display: block !important;
+	}
+</style>
+<script src="http://malsup.github.com/jquery.form.js"></script>
+<script src="https://api.trello.com/1/client.js?key=240f0872e3d6b6e557b23c94857dc26f"></script>
+<script type="text/javascript">
+	function TrelloViewModel() {
+		var root = this;
+		root.trelloCardName = ko.observable();
+		root.trelloCardDescription = ko.observable();
+		root.trelloCardUrl = ko.observable(window.location.pathname);
+		root.trelloSaveLoad = ko.observable('Save Card');
+		root.trelloAction = ko.observable(`/api/trello/card?token=${Trello.token()}`);
+
+		ko.bindingHandlers.trelloForm = {
+			init: function (element, valueAccessor) {
+				$(element).submit(function () {
+					if ($(element).valid()) {
+						root.trelloAction(`/api/trello/card?token=${Trello.token()}`);
+						root.trelloSaveLoad('<i class="fa fa-bug fa-spin"></i>');
+						$(element).ajaxSubmit({
+							error: function (xhr) {
+								console.log('Error : ' + xhr.status);
+							},
+							success: function (response) {
+								if (response.success) {
+									setTimeout(function () {
+										root.trelloSaveLoad('Save Card');
+										root.trelloClearModal();
+										$('#trello-attachments').val('');
+										$(document.getElementById('trello-modal')).modal('toggle');
+										setTimeout(function () {
+											toastr.options = {
+												closeButton: true,
+												progressBar: true,
+												showMethod: 'slideDown',
+												timeOut: 4000
+											};
+											toastr.success('Thanks for the feedback!', 'Trello');
+
+										}, 500);
+									}, 2000);
+								}
+							}
+						})
+					}
+					return false;
+				});
+			}
+		};
+
+		ko.bindingHandlers.trelloValidation = {
+                init: function (element, valueAccessor) {
+                    $(element).validate({
+                        errorClass: 'error trello-validation',
+                        rules: {
+                            name: {
+                                required: true
+                            },
+                            description: {
+                                required: true,
+                            },
+							url: {
+								required: true
+							}
+                        }
+                    })
+                }
+            };
+
+		root.trelloClearModal = function () {
+			root.trelloCardName(undefined);
+			root.trelloCardDescription(undefined);
+		};
+	};
+
+	$('#trello-trigger').click(function () {
+		if (Trello.token()) {
+			$('#trello-trigger').attr('data-toggle', 'modal');
+		} else {
+			var authenticationSuccess = function () {
+				setTimeout(function () {
+                    toastr.options = {
+                        closeButton: true,
+                        progressBar: true,
+                        showMethod: 'slideDown',
+                        timeOut: 4000
+                    };
+                    toastr.success('You are now connected to trello', 'Trello Authentication');
+
+                }, 500);
+				$('#trello-trigger').attr('data-toggle', 'modal');
+			};
+			var authenticationFailure = function () {
+				setTimeout(function () {
+                    toastr.options = {
+                        closeButton: true,
+                        progressBar: true,
+                        showMethod: 'slideDown',
+                        timeOut: 4000
+                    };
+                    toastr.error('Failed to authenticate trello', 'Trello Authentication');
+
+                }, 500);
+			};
+
+			Trello.authorize({
+				type: 'popup',
+				name: 'Leap Framework',
+				scope: {
+					read: 'true',
+					write: 'true'
+				},
+				expiration: 'never',
+				success: authenticationSuccess,
+				error: authenticationFailure
+			});
+		}
+	})
+
+	ko.cleanNode(document.getElementById('trello-modal'));
+	ko.applyBindings(new TrelloViewModel, document.getElementById('trello-modal'));
+</script>

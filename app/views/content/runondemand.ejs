@@ -1,0 +1,367 @@
+<link href="/css/plugins/daterangepicker/daterangepicker.css" rel="stylesheet">
+<script src="/js/plugins/moment/moment.min.js" type="text/javascript"></script>
+<script src="/js/plugins/daterangepicker/daterangepicker.js" type="text/javascript"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.css" rel="stylesheet">
+<style>
+    .clearLoading {
+        display: none !important;
+    }
+
+    .center {
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
+</style>
+<div id="wrapper-content" class="wrapper wrapper-content">
+    <div class="row">
+        <div class="ibox float-e-margins border-bottom">
+            <div class="ibox-title">
+                <h5>Run List</h5>
+            </div>
+            <div class="ibox-content">
+                <div class="row">
+                    <div class="table-responsive col-sm-12" data-bind="with: $root.selected">
+                        <div class="pull-right m-b">
+                            <span>Test script count: </span>
+                            <span data-bind="html: $root.selected().length"></span>
+                            <span>|</span>
+                            <span>Payload Size: </span>
+                            <span data-bind="html: $root.payloadSize"></span>
+                            <span>bytes (max 2097152 bytes)</span>
+                        </div>
+                        <table class="table table-striped table-bordered table-hover dataTables-example">
+                            <thead>
+                                <tr>
+                                    <th>Project Name</th>
+                                    <th>Module</th>
+                                    <th>Test/Suite Name</th>
+                                    <th>Author</th>
+                                    <th>Status</th>
+                                    <th>Date Created</th>
+                                    <th>Date Updated</th>
+                                    <!--<th>Custom Data</th>
+                                    <th>Remarks</th>-->
+                                    <th>Remove</th>
+                                </tr>
+                            </thead>
+                            <tbody data-bind="foreach: $root.selected">
+                                <tr class="gradeX">
+                                    <td data-bind="text: $data.projectName"></td>
+                                    <td data-bind="text: $data.module"></td>
+                                    <td data-bind="text: ($data.testName()) ? $data.testName : ($data.suiteName()) ? $data.suiteName : undefined"></td>
+                                    <td data-bind="text: $data.author"></td>
+                                    <td data-bind="text: $data.status"></td>
+                                    <td data-bind="text: $data.createdDate" /></td>
+                                    <td data-bind="text: $data.updatedDate" /></td>
+                                    <!--<td><textarea style="min-width: 100%;"></textarea></td>
+                                    <td><textarea style="min-width: 100%;"></textarea></td>-->
+                                    <td class="center">
+                                        <a href="#" data-bind="click: $root.removeFromSelected.bind($data, $index)" data-toggle="tooltip" title="Remove"><i class="fa fa-times text-navy"></i></a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-12">
+                        <div class="pull-right">
+                            <button type="button" class="btn btn-primary" data-bind="click: $root.runSetup, enable: $root.enableRun">Run Setup</button>
+                            <button type="button" class="btn" data-bind="click: $root.clearRunList, enable: $root.enableRun">Clear</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="tabs-container">
+            <ul class="nav nav-tabs">
+                <li class="active"><a data-toggle="tab" href="#tab-1">Scripts</a></li>
+                <li class=""><a data-toggle="tab" href="#tab-2">Suites</a></li>
+            </ul>
+            <div class="tab-content">
+                <div id="tab-1" class="tab-pane active">
+                    <div class="ibox-content" data-bind="css: { 'sk-loading': $root.isLoadingScripts() }">
+                        <div class="sk-spinner sk-spinner-double-bounce">
+                            <div class="sk-double-bounce1"></div>
+                            <div class="sk-double-bounce2"></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-7">
+                                <div class="input-group m-b">
+                                    <div class="input-group-btn">
+                                        <button data-toggle="dropdown" class="btn btn-white dropdown-toggle" type="button" aria-expanded="false" data-bind="html: `${$root.quickSearchFilterScript().name} <span class='caret'></span>`"></button>
+                                        <ul class="dropdown-menu">
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterScript.bind($data, { 'name': 'Project Name', 'value': 'projectName' })">Project Name</a></li>
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterScript.bind($data, { 'name': 'Module', 'value': 'module' })">Module</a></li>
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterScript.bind($data, { 'name': 'Test Name', 'value': 'testName' })">Test Name</a></li>
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterScript.bind($data, { 'name': 'Author', 'value': 'author' })">Author</a></li>
+                                        </ul>
+                                    </div>
+                                    <input type="text" data-bind="returnAction: $root.quickSearchScript, value: $root.quickSearchCriteriaScript, valueUpdate: 'afterkeydown'"
+                                        class="form-control" />
+                                    <span class="input-group-btn">
+                                <button type="button" data-bind="click: $root.quickSearchScript" class="btn btn-success">Search</button>
+                            </span>
+                                </div>
+                            </div>
+                            <div class="col-sm-5">
+                                <div class="pull-right">
+                                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#advance-search-modal">Advanced Search</button>
+                                    <button type="button" class="btn" data-bind="click: $root.aqSearchClear.bind($data, true)">Reset Filter</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="table-responsive col-sm-12" style="border-style: none !important;">
+                                <table class="table table-striped table-bordered table-hover dataTables-example">
+                                    <thead>
+                                        <tr>
+                                            <th>Project Name</th>
+                                            <th>Module</th>
+                                            <th>Test Name</th>
+                                            <th>Author</th>
+                                            <th>Status</th>
+                                            <th>Date Created</th>
+                                            <th>Date Updated</th>
+                                            <th>Add to run</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody data-bind="foreach: $root.pagedScripts">
+                                        <tr class="gradeX">
+                                            <td data-bind="text: $data.projectName"></td>
+                                            <td data-bind="text: $data.module"></td>
+                                            <td data-bind="text: $data.testName"></td>
+                                            <td data-bind="text: $data.author"></td>
+                                            <td data-bind="text: $data.status"></td>
+                                            <td data-bind="text: $data.createdDate"></td>
+                                            <td data-bind="text: $data.updatedDate"></td>
+                                            <td class="center">
+                                                <a href="#" data-bind="click: $data.addToRuns" data-toggle="tooltip" title="Add to list"><i class="fa fa-plus text-navy"></i></a>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="tab-2" class="tab-pane">
+                    <div class="ibox-content" data-bind="css: { 'sk-loading': $root.isLoadingScripts() }">
+                        <div class="sk-spinner sk-spinner-double-bounce">
+                            <div class="sk-double-bounce1"></div>
+                            <div class="sk-double-bounce2"></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-7">
+                                <div class="input-group m-b">
+                                    <div class="input-group-btn">
+                                        <button data-toggle="dropdown" class="btn btn-white dropdown-toggle" type="button" aria-expanded="false" data-bind="html: `${$root.quickSearchFilterSuite().name} <span class='caret'></span>`"></button>
+                                        <ul class="dropdown-menu">
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterSuite.bind($data, { 'name': 'Project Name', 'value': 'projectName' })">Project Name</a></li>
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterSuite.bind($data, { 'name': 'Module', 'value': 'module' })">Module</a></li>
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterSuite.bind($data, { 'name': 'Suite Name', 'value': 'testName' })">Suite Name</a></li>
+                                            <li><a href="#" data-bind="click: $root.quickSearchFilterSuite.bind($data, { 'name': 'Author', 'value': 'author' })">Author</a></li>
+                                        </ul>
+                                    </div>
+                                    <input type="text" data-bind="returnAction: $root.quickSearchSuite, value: $root.quickSearchCriteriaSuite, valueUpdate: 'afterkeydown'"
+                                        class="form-control" />
+                                    <span class="input-group-btn">
+                                <button type="button" data-bind="click: $root.quickSearchSuite" class="btn btn-success">Search</button>
+                            </span>
+                                </div>
+                            </div>
+                            <div class="col-sm-5">
+                                <div class="pull-right">
+                                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#advance-search-modal">Advanced Search</button>
+                                    <button type="button" class="btn" data-bind="click: $root.aqSearchClear.bind($data, true)">Reset Filter</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="table-responsive col-sm-12" style="border-style: none !important;">
+                                <table class="table table-striped table-bordered table-hover dataTables-example">
+                                    <thead>
+                                        <tr>
+                                            <th>Project Name</th>
+                                            <th>Module</th>
+                                            <th>Test Name</th>
+                                            <th>Author</th>
+                                            <th>Status</th>
+                                            <th>Date Created</th>
+                                            <th>Date Updated</th>
+                                            <th>Add to run</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody data-bind="foreach: $root.pagedSuites">
+                                        <tr class="gradeX">
+                                            <td data-bind="text: $data.projectName"></td>
+                                            <td data-bind="text: $data.module"></td>
+                                            <td data-bind="text: $data.suiteName"></td>
+                                            <td data-bind="text: $data.author"></td>
+                                            <td data-bind="text: $data.status"></td>
+                                            <td data-bind="text: $data.createdDate"></td>
+                                            <td data-bind="text: $data.updatedDate"></td>
+                                            <td class="center">
+                                                <a href="#" data-bind="click: $data.addToRuns" data-toggle="tooltip" title="Add to list"><i class="fa fa-plus text-navy"></i></a>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- modals -->
+    <div id="advance-search-modal" tabindex="-1" class="modal inmodal" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content animated bounceInRight">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">×</span>
+                    </button>
+                    <h4 class="modal-title">Advanced Search</h4>
+                </div>
+                <div class="modal-body">
+                    <form class="form-horizontal" id="advanced-search-form" data-bind="filterForm">
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Project Name</label>
+                            <div class="col-sm-10">
+                                <select data-bind="select2: { observable: $root.aSearchProject, placeholder: 'Select a project ...' }, options: $root.availableProjects"
+                                    multiple="multiple" class="aSearchSelect2" style="width: 100%;">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Test Name</label>
+                            <div class="col-sm-10">
+                                <input class="form-control" data-bind="value: $root.aSearchScript" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Status</label>
+                            <div class="col-sm-10">
+                                <select data-bind="select2: { observable: $root.aSearchStatus, placeholder: 'Select a status ...' }" multiple="multiple"
+                                    class="aSearchSelect2" style="width: 100%;">
+                                    <option value="completed">Completed</option>
+                                    <option value="in-progress">In-progress</option>
+                                    <option value="maintenance">Maintenance</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Author</label>
+                            <div class="col-sm-10">
+                                <select data-bind="select2: { observable: $root.aSearchAuthor, placeholder: 'Select an author ...' }, options: $root.availableAuthors"
+                                    multiple="multiple" class="aSearchSelect2" style="width: 100%;">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Created Date</label>
+                            <div class="col-sm-10">
+                                <button type="button" class="btn btn-default" data-bind="datePicker" data-picker-date="Created" data-picker-observable="aSearchCreatedDate">
+                                    <span>Filter by created date</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Updated Date</label>
+                            <div class="col-sm-10">
+                                <button type="button" class="btn btn-default" data-bind="datePicker" data-picker-date="Updated" data-picker-observable="aSearchUpdatedDate">
+                                    <span>Filter by updated date</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="hr-line-dashed"></div>
+                        <div class="form-group" data-bind="attr: { style: ($root.isZeroResult()) ? 'display: block;' : 'display: none;'">
+                            <span class="col-sm-offset-2 col-sm-10" style="color: #ff0000" data-bind="text: ($root.isZeroResult()) ? 'No results found.' : ''"></span>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-sm-offset-2 col-sm-10">
+                                <button type="button" class="btn btn-default" data-bind="click: $root.aqSearchClear.bind($data, false)">Clear</button>
+                                <button type="submit" class="btnwizard btn btn-primary" form="advanced-search-form">Search</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="run-setup-modal" tabindex="-1" class="modal inmodal" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content animated bounceInRight">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">×</span>
+                    </button>
+                    <h4 class="modal-title">Run Setup</h4>
+                </div>
+                <div class="modal-body">
+                    <form class="form-horizontal" id="advanced-search-form" data-bind="filterForm">
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">URL</label>
+                            <div class="col-sm-10">
+                                <input class="form-control" data-bind="value: $root.host" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">OS</label>
+                            <div class="col-sm-10">
+                                <select class="form-control" data-bind="options: $root.osList, optionsText: 'name', value: $root.os">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Browser</label>
+                            <div class="col-sm-10">
+                                <select class="form-control" data-bind="options: $root.browserList, optionsText: 'name', value: $root.browser">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Browser Version</label>
+                            <div class="col-sm-10">
+                                <select class="form-control" data-bind="options: $root.browserVersionList, optionsText: 'name', value: $root.browserVersion">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Test Mode</label>
+                            <div class="col-sm-10">
+                                <select class="form-control" data-bind="options: $root.testModeList, optionsText: 'name', value: $root.testMode">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">Resolution</label>
+                            <div class="col-sm-10">
+                                <select class="form-control" data-bind="options: $root.browserResolutionList, optionsText: 'name', value: $root.browserResolution">
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <a href="/execution/testresults" data-bind="visible: $root.showTestResultsUrl, attr: { href: '/execution/testresults' + ($root.selected().some(_ => _.isSuite()) ? '' : '?activeTab=script') }" style="color: inherit;"><button type="button" class="btn btn-info">View Test Results</button></a>
+                    <button type="button" class="btn btn-white" data-bind="click: $root.resetRunSetup">Reset</button>
+                    <button type="button" data-toggle="tooltip" title="Run" class="btn btn-primary" data-bind="click: $root.runRunList"><i class="fa fa-fw fa-play"></i></button>
+                    <button class="btn btn-success" data-toggle="tooltip" title="Export Scripts" type="button" data-bind="click: $root.exportScripts"><i class="fa fa-fw fa-download"> </i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<!-- ./wrapper-content -->

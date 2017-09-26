@@ -1,0 +1,1012 @@
+<!-- Steps -->
+<script src="/js/plugins/steps/jquery.steps.min.js"></script>
+<!-- Jquery Validate -->
+<script src="/js/plugins/validate/jquery.validate.min.js"></script>
+<!-- Select2 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
+<!-- Ace Editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.8/ace.js" type="text/javascript" charset="utf-8"></script>
+
+<script type="text/javascript">
+    var _query = <%- JSON.stringify(query) %>;
+    var _type = _query.type; delete _query.type;
+    var _author = <%- JSON.stringify(user.fullname) %>;
+    
+    var _customScriptGreeting = '';
+    _customScriptGreeting += '/**********************************************\n';
+    _customScriptGreeting += '* WRITE YOUR CUSTOM NIGHTWATCH HERE\n';
+    _customScriptGreeting += '* USE JAVASCRIPT CODE ONLY\n*\n';
+    _customScriptGreeting += `* USE 'test' TO ACCESS CONTEXT 'this'\n*\n`;
+    _customScriptGreeting += '* EXAMPLE:\n';
+    _customScriptGreeting += '* LOOP THRU ELEMENTS USING XPATH AND DISPLAY THEIR INNERHTML\n*\n';
+    _customScriptGreeting += `* \ttest.elements("xpath", ".//*[@id='main-menu']/li/a", function(elements) {\n`;
+    _customScriptGreeting += `* \t\tasync.eachSeries(elements.value, function(element, callback) {\n`;
+    _customScriptGreeting += `* \t\t\ttest.elementIdText(element.ELEMENT, function(result) {\n`;
+    _customScriptGreeting += `* \t\t\t\tconsole.log(result.value);\n`;
+    _customScriptGreeting += `* \t\t\t\tcallback();\n`;
+    _customScriptGreeting += `* \t\t\t});\n`;
+    _customScriptGreeting += `* \t\t});\n`;
+    _customScriptGreeting += `* \t});\n*\n`;
+    _customScriptGreeting += '* VISIT http://nightwatchjs.org/api FOR GUIDE\n';
+    _customScriptGreeting += '***********************************************/'
+
+    var _editor = ace.edit('ace-js-editor');
+    _editor.setTheme('ace/theme/monokai');
+    _editor.getSession().setMode('ace/mode/javascript');
+    _editor.setValue(_customScriptGreeting);
+
+    function ScenarioWizardViewModel(data, query, projects) {
+        var root = this;
+
+        root.myScenario = ko.observable(new Scenario());
+
+        // #########################################
+        // MODELS
+        // #########################################
+
+        function Scenario(scenario) {
+            var _scenario = this;
+
+            // main properties
+            _scenario.originalName = ko.observable((scenario) ? scenario.name || undefined : undefined);
+
+            // main properties
+            _scenario._id = ko.observable((scenario) ? scenario._id || undefined : undefined);
+            _scenario.name = ko.observable((scenario) ? scenario.name || undefined : undefined);
+            _scenario.description = ko.observable((scenario) ? scenario.description || undefined : undefined);
+            _scenario.project = ko.observable((scenario) ? scenario.project || undefined : undefined);
+            _scenario.author = ko.observable((scenario) ? scenario.author || _author : _author);
+            _scenario.lastUpdatedBy = ko.observable((scenario) ? scenario.lastUpdatedBy || undefined : undefined);
+            _scenario.createdDate = ko.observable((scenario) ? scenario.createdDate || undefined : undefined);
+            _scenario.updatedDate = ko.observable((scenario) ? scenario.updatedDate || undefined : undefined);
+            _scenario.projectDisplayName = ko.observable((scenario) ? scenario.projectDisplayName || undefined : undefined);
+            _scenario.module = ko.observable((scenario) ? scenario.module || undefined : undefined);
+            _scenario.status = ko.observable((scenario) ? scenario.status || undefined : undefined);
+            _scenario.steps = ko.observableArray([]);
+
+            // extras
+            _scenario.selectedProject = ko.observable();
+            _scenario.selectedProject.subscribe(function (newValue) {
+                if (newValue && newValue.value) {
+                    if (_scenario.project() == newValue.value);
+                        return;
+
+                    _scenario.project(newValue.value);
+                    _scenario.projectDisplayName(newValue.name)
+                    loadPages({ project: newValue.value });
+                }
+            });
+            _scenario.selectedStatus = ko.observable((scenario) ? scenario.status || undefined : undefined);
+            _scenario.selectedStatus.subscribe(function (newValue) {
+                _scenario.status(newValue);
+            });
+            _scenario.hasErrors = ko.observable(false);
+            _scenario.selectedStep = ko.observable();
+            _scenario.editableStep = ko.observable(new Step());
+            _scenario.editingStep = ko.observable(false);
+            _scenario.editableAssertion = ko.observable(new Assertion());
+            _scenario.editingAssertion = ko.observable(false);
+
+            _scenario.name.subscribe(function (newValue) {
+                if (_scenario.originalName() == _scenario.name()) {
+                    _scenario.nameIcon('check');
+                    return;
+                }
+
+                if (newValue.trim().length == 0) {
+                    _scenario.nameIcon('times');
+                    return;
+                }
+
+                _scenario.nameIcon('circle-o-notch fa-spin');
+                $.ajax({
+                    type: 'POST',
+                    url: '/api/getScripts',
+                    data: JSON.stringify({ query: { name: newValue.trim() } }),
+                    contentType: 'application/json; charset=utf8',
+                    dataType: 'json',
+                    statusCode: {
+                        200: function (response) {
+                            if (response.length > 0)
+                                _scenario.nameIcon('times');
+                            else
+                                _scenario.nameIcon('check');
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(error);
+                        _scenario.nameIcon('times');
+                    }
+                });
+            });
+            _scenario.nameIcon = ko.observable('times');
+            _scenario.verificationBox = ko.observable();
+            _scenario.nameIcon.subscribe(function () {
+                switch (_scenario.nameIcon()) {
+                    case 'check': _scenario.verificationBox('valid'); break;
+                    case 'times': _scenario.verificationBox('invalid'); break;
+                    case 'circle-o-notch fa-spin': _scenario.verificationBox('validating'); break;
+                }
+            });
+
+            // initialize arrays
+            if (scenario && scenario.steps) {
+                var mapping = {
+                    'steps': {
+                        create: function (options) {
+                            return new Step(options.data, _scenario);
+                        }
+                    }
+                }
+
+                var mappingData = { steps: scenario.steps };
+                ko.mapping.fromJS(mappingData, mapping, _scenario);
+            };
+
+            _scenario.selectStep = function (index) {
+                if (typeof index == 'function') {
+                    _scenario.selectedStep(_scenario.steps()[index()]);
+                }
+            };
+
+            _scenario.addStepTrigger = function () {
+                _editor.setValue(_customScriptGreeting);
+                _scenario.editingStep(false);
+                _scenario.editableStep(new Step());
+                $('#steps-modal').modal('show');
+            };
+
+            _scenario.saveStep = function () {
+                if (_scenario.editableStep().action() == 'customStep') {
+                    _scenario.editableStep().testData(_editor.getValue());
+                }
+
+                if (!_scenario.editableStep().testDataStatus.validation())
+                    return;
+
+                _scenario.editingStep(false);
+                _scenario.editableStep(new Step());
+                $('#steps-modal').modal('hide');
+            };
+
+            _scenario.addStep = function () {
+                if (!_scenario.editableStep().testDataStatus.validation())
+                    return;
+
+                if (_scenario.editableStep().action() == 'customStep') {
+                    _scenario.editableStep().testData(_editor.getValue());
+                }
+                
+                var newStep = new Step(ko.toJS(_scenario.editableStep), _scenario);
+                newStep.editStep(); // refresh page data before pushing to scenario.steps
+                _scenario.steps.push(newStep);
+                _scenario.editableStep(new Step());
+            };
+
+            _scenario.addAssertionTrigger = function () {
+                _scenario.editingAssertion(false);
+                _scenario.editableAssertion(new Assertion());
+                $('#assertions-modal').modal('show');
+            };
+
+            _scenario.saveAssertion = function () {
+                _scenario.editingAssertion(false);
+                _scenario.editableAssertion(new Assertion());
+                $('#assertions-modal').modal('hide');
+            };
+
+            _scenario.addAssertion = function () {
+                var newAssertion = new Assertion(ko.toJS(_scenario.editableAssertion), _scenario.selectedStep());
+                newAssertion.editAssertion(); // refresh page data before pushing to scenario.step.assertions
+                _scenario.selectedStep().assertions.push(newAssertion);
+                _scenario.editableAssertion(new Assertion());
+            };
+
+            _scenario.initialize = function () {
+                // refresh steps and assertion data
+                _scenario.steps().forEach(function (step) {
+                    step.initialize();
+                    step.assertions().forEach(function (assertion) {
+                        assertion.initialize();
+                    });
+                });
+            };
+        }
+
+        function Step(step, parent) {
+            var _step = this;
+            _step._parent = ko.observable(parent || undefined);
+
+            // main properties
+            _step.option = ko.observable((step) ? step.options || undefined : undefined);
+            _step.action = ko.observable((step) ? step.action || undefined : undefined);
+            _step.pageId = ko.observable((step) ? step.pageId || undefined : undefined);
+            _step.objectId = ko.observable((step) ? step.objectId || undefined : undefined);
+            //_step.message = ko.observable((step) ? step.message || undefined : undefined);
+            _step.dataRequired = ko.observable((step) ? step.dataRequire || false : false);
+            _step.testData = ko.observable((step) ? step.testData || '' : '');
+            _step.assertions = ko.observableArray([]);
+
+            // extras
+            _step.page = ko.observable();
+            _step.object = ko.observable();
+            _step.index = ko.observable(0);
+            _step.selectedPage = ko.observable();
+            _step.selectedPage.subscribe(function (newValue) {
+                if (newValue && newValue._id) {
+                    _step.pageId(newValue._id);
+                    _step.page(newValue);
+                }
+            });
+            _step.selectedObject = ko.observable();
+            _step.selectedObject.subscribe(function (newValue) {
+                if (newValue && newValue._id) {
+                    _step.objectId(newValue._id);
+                    _step.object(newValue);
+                }
+            });
+
+            var validations = {
+                customStep: {
+                    placeholder: undefined,
+                    message: undefined,
+                    required: true,
+                    isCustom: true
+                },
+                resizeWindow: {
+                    placeholder: 'e.g. 1920x1080',
+                    message: 'Please follow resolution format (height x width)',
+                    regex: /^(\d+x{1}\d+){1}$/,
+                    required: true
+                },
+                switchWindow: {
+                    placeholder: 'e.g. 2',
+                    message: 'Use window index number, starts at 0.',
+                    regex: /^\d{1,3}$/,
+                    required: true
+                },
+                pause: {
+                    placeholder: 'e.g. 5000',
+                    message: 'Input numbers only in milliseconds',
+                    regex: /^\d+$/,
+                    required: true
+                },
+                setValue: {
+                    placeholder: 'e.g. John Doe',
+                    message: 'Input alphanumeric characters',
+                    required: true
+                },
+                default: {
+                    placeholder: '',
+                    message: undefined,
+                    required: false
+                }
+            };
+            function setTestDataValidation(action) {
+                if (action == null) {
+                    _step.testData('');
+                    _step.testDataStatus.placeholder('');
+                    _step.testDataStatus.validationMessage(undefined);
+                    _step.testDataStatus.isRequired(false);
+                    return true;
+                }
+
+                action = validations[action];
+                if (!action) action = validations.default;
+
+                _step.testDataStatus.displayCustomStep(action.isCustom || false);
+                _step.testDataStatus.placeholder(action.placeholder);
+                _step.testDataStatus.isRequired(action.required);
+                if (!action.required) _step.testData('');
+                var validity = (action.regex) ? action.regex.test(_step.testData()) : true;
+                (validity) ?
+                    _step.testDataStatus.validationMessage(undefined) :
+                    _step.testDataStatus.validationMessage(action.message);
+
+                return validity;
+            };
+            _step.testDataStatus = ko.observable(false);
+            _step.testDataStatus.placeholder = ko.observable('');
+            _step.testDataStatus.validationMessage = ko.observable(undefined);
+            _step.testDataStatus.isRequired = ko.observable(false);
+            _step.testDataStatus.displayCustomStep = ko.observable(false)
+            _step.testDataStatus.validation = ko.computed(function () {
+                var action = _step.action();
+                switch (_step.action()) {
+                    case '':
+                        return setTestDataValidation(null);
+                    default:
+                        return setTestDataValidation(action);
+                }
+            });
+
+
+            // initialize arrays
+            if (step && step.assertions) {
+                var mapping = {
+                    'assertions': {
+                        create: function (options) {
+                            return new Assertion(options.data, _step);
+                        }
+                    }
+                }
+
+                var mappingData = { assertions: step.assertions };
+                ko.mapping.fromJS(mappingData, mapping, _step);
+            }
+
+            _step.addAssertion = function () {
+                _step.assertions.push(_parent()._parent().editableAssertion());
+            };
+
+            _step.removeStep = function (index) {
+                if (typeof index == 'function') {
+                    if (_step._parent().selectedStep() == _step) {
+                        _step._parent().selectedStep(undefined);
+                    }
+                    _step._parent().steps.splice(index(), 1);
+                }
+            };
+
+            _step.editStep = function () {
+
+                _step._parent().editingStep(true);
+                _step._parent().editableStep(_step);
+                _editor.setValue(_step.testData());
+            }
+
+            _step.initialize = function () {
+                _step.selectedPage(root.pages().filter(_ => _._id == _step.pageId())[0]);
+                if (_step.selectedPage()) {
+                    _step.selectedObject(_step.selectedPage().elements.filter(_ => _._id == _step.objectId())[0]);
+                }
+            }
+        }
+
+        function Assertion(assertion, parent) {
+            var _assertion = this;
+            _assertion._parent = ko.observable(parent || undefined);
+
+            _assertion.pageId = ko.observable((assertion) ? assertion.pageId || undefined : undefined);
+            _assertion.objectId = ko.observable((assertion) ? assertion.objectId || undefined : undefined);
+            _assertion.assertion = ko.observable((assertion) ? assertion.assertion || undefined : undefined);
+            _assertion.attribute = ko.observable((assertion) ? assertion.attribute || undefined : undefined);
+            _assertion.expected = ko.observable((assertion) ? assertion.expected || undefined : undefined);
+            _assertion.message = ko.observable((assertion) ? assertion.message || undefined : undefined);
+
+            // extras
+            _assertion.page = ko.observable();
+            _assertion.object = ko.observable();
+            _assertion.selectedPage = ko.observable();
+            _assertion.selectedPage.subscribe(function (newValue) {
+                if (newValue && newValue._id) {
+                    _assertion.pageId(newValue._id);
+                    _assertion.page(newValue);
+                }
+            });
+            _assertion.selectedObject = ko.observable();
+            _assertion.selectedObject.subscribe(function (newValue) {
+                if (newValue && newValue._id) {
+                    _assertion.objectId(newValue._id);
+                    _assertion.object(newValue);
+                }
+            });
+
+            _assertion.editAssertion = function (index) {
+                _assertion._parent()._parent().editingAssertion(true);
+                _assertion._parent()._parent().editableAssertion(_assertion);
+            };
+
+            _assertion.removeAssertion = function (index) {
+                if (typeof index == 'function') {
+                    _assertion._parent().assertions.splice(index(), 1);
+                }
+            };
+
+            _assertion.initialize = function() {
+                _assertion.selectedPage(root.pages().filter(_ => _._id == _assertion.pageId())[0]);
+                if (_assertion.selectedPage()) {
+                    _assertion.selectedObject(_assertion.selectedPage().elements.filter(_ => _._id == _assertion.objectId())[0]);
+                }
+            }
+        }
+
+        function TestData(testData, parent) {
+            var _testData = this;
+            _testData._parent = ko.observable(parent);
+
+            _testData.input = ko.observable((testData) ? testData.input || undefined : undefined);
+            _testData.target = ko.observable((testData) ? testData.target || undefined : undefined);
+        }
+
+        // #########################################
+        // DATA VARIABLES
+        // #########################################
+
+        root.projects = ko.observableArray([]);
+        root.templateScenarios = ko.observableArray([]);
+        root.templateAuthors = ko.observableArray([]);
+        root.statuses = ko.observableArray(["In-progress", "Maintenance", "Completed"]);
+        root.options = ["", "Skip", "Util", "Loop"];
+        root.pages = ko.observableArray([]);
+        root.actions = ["", "url", "setValue", "clearValue", "click", "moveToElement", "waitForElementVisible", "waitForElementPresent", "waitForElementNotVisible", "waitForElementNotPresent", "pause", "acceptAlert", "dismissAlert", "switchWindow", "resizeWindow", "end", "customStep"];
+        root.assertionsList = ["attributeContains", "attributeEquals", "containsText", "cssClassPresent", "cssClassNotPresent", "cssProperty", "elementPresent", "elementNotPresent", "hidden", "title", "urlContains", "urlEquals", "value", "valueContains", "visible"];
+        root.reviewScenario = ko.observable();
+        root.reviewCleanScenario = ko.observable();
+        root.reviewSelectedStep = ko.observable();
+
+        // #########################################
+        // FUNCTIONS
+        // #########################################
+
+        function getCleanScenario() {
+            var scenario = ko.toJS(ko.utils.unwrapObservable(root.myScenario));
+            cleanObject(scenario);
+            delete scenario.editingStep;
+            delete scenario.editingAssertion;
+            delete scenario.nameIcon;
+            delete scenario.verificationBox;
+            delete scenario.hasErrors;
+            delete scenario.originalName;
+            delete scenario.selectedProject;
+            delete scenario.selectedStatus;
+            delete scenario.selectedStep;
+            scenario.steps.forEach(function (step) {
+                cleanObject(step);
+                delete step.index;
+                delete step.testDataStatus;
+                step.assertions.forEach(function (assertion) {
+                    cleanObject(assertion);
+                });
+            });
+
+            return scenario;
+        }
+
+        function cleanObject(object) {
+            Object.keys(object).forEach(function (key) {
+                if (object.hasOwnProperty(key)) {
+                    if (typeof object[key] == 'function')
+                        delete object[key];
+                    if (typeof object[key] == 'undefined')
+                        delete object[key];
+                    if (object[key] instanceof Array)
+                        return;
+                    if (typeof object[key] == 'object')
+                        delete object[key];
+                }
+            });
+            return object;
+        };
+
+        function createToaster(title, message, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || 'success'](message, title || 'Script Editor');
+
+            }, 500);
+        };
+
+        function validateFirstFieldset() {
+            var validity = [];
+            var cause = undefined;
+            if (root.myScenario().nameIcon() == 'check') {
+                validity.push(true);
+            } else {
+                validity.push(false);
+                cause = 'Scenario name is already used.'
+            }
+
+            return { valid: !validity.includes(false), cause: cause };
+        };
+
+        function validateSecondFieldset() {
+            // verify scenarios
+            var validity = isScenarioValid();
+            return { valid: validity.valid, cause: validity.cause };
+        };
+
+        function isScenarioValid() {
+            var scenarioContentValidity = [];
+            var scenarioStepsValidity = [];
+            if (root.myScenario().name() && root.myScenario().description()) {
+                scenarioContentValidity.push(true);
+                root.myScenario().hasErrors(false);
+            } else {
+                scenarioContentValidity.push(false);
+                root.myScenario().hasErrors(true);
+            }
+
+            if (root.myScenario().steps().length > 0) {
+                scenarioStepsValidity.push(true);
+                if (!root.myScenario().hasErrors())
+                    root.myScenario().hasErrors(false);
+            } else {
+                scenarioStepsValidity.push(false);
+                root.myScenario().hasErrors(true);
+            }
+
+            if (scenarioContentValidity.includes(false))
+                return { valid: false, cause: 'Please provide name and description for your scenarios.' };
+
+            return { valid: !scenarioStepsValidity.includes(false), cause: 'Some scenario does not have a step. Please revalidate.' };
+        };
+
+        function loadPages(query, scenario) {
+            var fields = {
+                name: 1,
+                'elements._id': 1,
+                'elements.name': 1,
+                'elements.selectors.selector': 1
+            };
+
+            $.ajax({
+                type: 'POST',
+                url: '/api/getPages',
+                data: JSON.stringify({ query: query, options: { select: fields } }),
+                contentType: 'application/json; charset=utf8',
+                dataType: 'json',
+                statusCode: {
+                    200: function (response) {
+                        root.pages([]);
+                        response.forEach(function (page) {
+                            root.pages.push(page);
+                        });
+
+                        if (root.myScenario().project());
+                            root.myScenario().initialize();
+                        
+                        if (scenario) {
+                            root.myScenario(new Scenario(scenario));
+                            root.myScenario().nameIcon('check');
+                            root.myScenario().selectedProject(root.projects().filter(_ => _.value == root.myScenario().project())[0]);                        
+                            root.myScenario().initialize();
+                        }
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error(error);
+                }
+            });
+        };
+
+        root.resetScenario = function () {
+            root.myScenario().steps([]);
+        };
+
+        root.refreshObjects = function () {
+            loadPages({ project: root.myScenario().project() });
+        };
+
+        root.useTemplate = function (scenario) {
+            var cleanTemplate = ko.toJS(scenario);
+            delete cleanTemplate._id;
+            delete cleanTemplate.author;
+            delete cleanTemplate.createdDate;
+            delete cleanTemplate.updatedDate;
+            delete cleanTemplate.status;
+            cleanTemplate.module = root.myScenario().module();
+            cleanTemplate.name = root.myScenario().name();
+            cleanTemplate.description = root.myScenario().description();
+            cleanTemplate.author = root.myScenario().author();
+
+            root.myScenario(new Scenario(cleanTemplate));
+        };
+
+        root.formatDate = function (knockoutDate) {
+            if (typeof knockoutDate == 'function')
+                knockoutDate = ko.toJS(knockoutDate);
+
+            if (knockoutDate === undefined)
+                return null;
+
+            var date = new Date(knockoutDate);
+            var ampm = (date.getHours() >= 12) ? 'PM' : 'AM';
+            var hours = (date.getHours());
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${hours}:${date.getMinutes()}:${date.getSeconds()} ${ampm}`;
+        };
+
+        root.describeAction = function (step) {
+            if (typeof step == 'function')
+                step = ko.toJS(step);
+
+            if (step === undefined)
+                return null;
+
+            if (step.action === 'url')
+                return `Visit ${step.page}`;
+            else if (step.action === 'clearValue')
+                return `Clearing ${step.page} > ${step.object} field`
+            else if (step.action === 'setValue')
+                return `Write ${step.testData} to ${step.page} > ${step.object} field`
+            else if (step.action === 'click')
+                return `Click ${step.page} > ${step.object} element`
+            else if (step.action === 'moveToElement')
+                return `Move cursor to ${step.page} > ${step.object}`
+            else if (step.action === 'waitForElementVisible')
+                return `Wait for visibility of ${step.page} > ${step.object}`
+            else if (step.action === 'end')
+                return `Close browser browser`
+        };
+
+        root.describeAssertion = function (step, assertion) {
+            if (typeof step == 'function')
+                step = ko.toJS(step);
+
+            if (typeof assertion == 'function')
+                assertion = ko.toJS(assertion);
+
+            if (step === undefined)
+                return null;
+
+            if (assertion === undefined)
+                return null;
+
+            if (assertion.assertion === 'attributeContains')
+                return `Assert attribute ${assertion.attribute} of ${step.page} > ${assertion.element} should contain ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'attributeEquals')
+                return `Assert attribute ${assertion.attribute} of ${step.page} > ${assertion.element} should be equal to ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'containsText')
+                return `Assert ${step.page} > ${assertion.element} if contains ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'cssClassPresent')
+                return `Assert class of ${step.page} > ${assertion.element} should contain ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'cssClassNotPresent')
+                return `Assert class of ${step.page} > ${assertion.element} should not contain ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'cssProperty')
+                return `Assert CSS ${step.attribute} of ${step.page} > ${assertion.element} should be ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'elementPresent')
+                return `Assert ${step.page} > ${assertion.element} should be present ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'elementNotPresent')
+                return `Assert ${step.page} > ${assertion.element} should not be present ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'hidden')
+                return `Assert ${step.page} > ${assertion.element} should not be hidden ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'visible')
+                return `Assert ${step.page} > ${assertion.element} should not be visible ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'title')
+                return `Assert title of page should be ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'urlContains')
+                return `Assert current url should contain ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+            else if (assertion.assertion === 'urlEquals')
+                return `Assert current url should equal ${assertion.expected} ${(assertion.message) ? ' : ' + assertion.message : ''}`
+        };
+
+        root.toggleAccordion = function (index) {
+            var chevron = $('#scenario-chevron-' + index);
+            (chevron.hasClass('fa-chevron-down')) ? chevron.attr('class', 'fa fa-fw fa-chevron-up') : chevron.attr('class', 'fa fa-fw fa-chevron-down');
+
+            var content = $('#scenario-content-' + index);
+            (content.hasClass('in')) ? content.removeClass('in') : content.addClass('in');
+        };
+
+        root.expandAll = function (id) {
+            $($('#' + id + '').find('.ibox-content.collapse')).each(function (index, element) {
+                $($(element).prev().find('.ibox-tools a').first().find('i')).attr('class', 'fa fa-fw fa-chevron-down');
+                $(element).addClass('in');
+            });
+        };
+
+        root.collapseAll = function (id) {
+            $($('#' + id + '').find('.ibox-content.collapse')).each(function (index, element) {
+                $($(element).prev().find('.ibox-tools a').first().find('i')).attr('class', 'fa fa-fw fa-chevron-up');
+                $(element).removeClass('in');
+            });
+        };
+
+        root.expandAccordion = function (item, event) {
+            var accordionChild = $($($($(event.target).parent().parent().parent().parent()).find('.ibox-content'))[0]);
+            if (accordionChild.hasClass('in')) {
+                if ($(event.target).is('a'))
+                    $($(event.target).find('i')).attr('class', 'fa fa-fw fa-chevron-up');
+                else
+                    $(event.target).attr('class', 'fa fa-fw fa-chevron-up');
+                accordionChild.removeClass('in');
+            } else {
+                if ($(event.target).is('a'))
+                    $($(event.target).find('i')).attr('class', 'fa fa-fw fa-chevron-down');
+                else
+                    $(event.target).attr('class', 'fa fa-fw fa-chevron-down');
+                accordionChild.addClass('in');
+            }
+        };
+
+        root.submitScenario = function () {
+            $('#save-scenario-confirmation-modal').modal('show');
+        };
+
+        root.saveScenario = function () {
+            // convert view model to json data
+            // save script created using POST /addscript API
+
+            $.ajax({
+                type: 'POST',
+                url: (_type == 'edit') ? '/api/scenarios/update' : '/api/scenarios',
+                //data: JSON.stringify({ scenario: scenarioData, type: query.type, updatedBy: _author }),
+                data: JSON.stringify(getCleanScenario()),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                statusCode: {
+                    200: function (response) {
+                        createToaster('Scenario Editor', `${response.message}\n Redirecting...`);
+                        setTimeout(function () {
+                            window.location.href = '../scenariorepository/' + root.myScenario().project();
+                        }, 3000);
+                    },
+                    201: function (response) {
+                        createToaster('Scenario Editor', `${response.message}\n Redirecting...`);
+                        setTimeout(function () {
+                            window.location.href = '../scenariorepository/' + root.myScenario().project();
+                        }, 3000);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error(error);
+                }
+            });
+        };
+
+        // #########################################
+        // INITIALIZATION
+        // #########################################
+
+        // load projects
+        $.ajax({
+            type: 'POST',
+            url: '/api/getProjects',
+            data: JSON.stringify({ query: {} }),
+            contentType: 'application/json; charset=utf8',
+            dataType: 'json',
+            statusCode: {
+                200: function (response) {
+                    root.projects([
+                        { name: '', value: undefined }
+                    ]);
+                    response.forEach(function (project) {
+                        root.projects.push({ name: project.name, value: project.projectKey });
+                    });
+                    init_scenarios();
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error(error);
+            }
+        });
+
+        // load scenario
+        var init_scenarios = function () {
+            if (Object.keys(_query).length > 1) {
+                $.ajax({
+                    type: 'POST',
+                    url: '/api/getScenarios',
+                    data: JSON.stringify({ query: _query }),
+                    contentType: 'application/json; charset=utf8',
+                    dataType: 'json',
+                    statusCode: {
+                        200: function (response) {
+                            if (response.length > 0) {
+                                if (response.length > 1)
+                                    createToaster(undefined, response.length + ' scenarios was found</br>First scenario was loaded to editor', 'warning');
+
+                                loadPages({ project: root.myScenario().project() }, response[0]);
+                            } else {
+                                createToaster(undefined, 'No scenario was found', 'error');
+                            }
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(error);
+                    }
+                });
+            } else {
+                if (_query.hasOwnProperty('project')) {
+                    root.myScenario().selectedProject(root.projects().filter(_ => _.value == _query['project'])[0]);
+                    loadPages({ project: root.myScenario().project() });
+                }
+            }
+        }
+
+        // load templates
+        $.ajax({
+            type: 'POST',
+            url: '/api/getScenarios',
+            data: JSON.stringify({ query: {}, options: { select: { author: 1 } } }),
+            contentType: 'application/json; charset=utf8',
+            dataType: 'json',
+            statusCode: {
+                200: function (response) {
+                    var array = Array.from(new Set(response.map((_) => { return _.author })));
+                    array.unshift('');
+                    root.templateAuthors(array);
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error(error);
+            }
+        });
+
+        // #########################################
+        // BINDING HANDLERS
+        // #########################################
+
+        ko.bindingHandlers.templateSearch = {
+            init: function (element, valueAccessor) {
+                root.s_author = ko.observable();
+                root.s_name = ko.observable();
+                root.s_createdDate = ko.observable();
+                root.s_updatedDate = ko.observable();
+                root.s_clearTemplateForm = function () {
+                    root.s_author('');
+                    root.s_name(undefined);
+                    root.s_createdDate(undefined);
+                    root.s_updatedDate(undefined);
+                };
+                function splitDate(date) {
+                    return date.split('~');
+                }
+                $(element).submit(function (e) {
+                    e.preventDefault();
+
+                    var query = {
+                        project: root.myScenario().project(),
+                        author: root.s_author(),
+                        name: (root.s_name()) ?
+                            { $regex: root.s_name(), $options: 'i' } : undefined,
+                        createdDate: (root.s_createdDate()) ?
+                            { $gt: splitDate(root.s_createdDate()).shift(), $lt: splitDate(root.s_createdDate()).pop() } : undefined,
+                        updatedDate: (root.s_updatedDate()) ?
+                            { $gt: splitDate(root.s_updatedDate()).shift(), $lt: splitDate(root.s_updatedDate()).pop() } : undefined
+                    };
+
+                    query = JSON.parse(JSON.stringify(query));
+
+                    $.ajax({
+                        type: 'POST',
+                        url: '/api/getScenarios',
+                        data: JSON.stringify({ query: query }),
+                        contentType: 'application/json; charset=utf8',
+                        dataType: 'json',
+                        statusCode: {
+                            200: function (response) {
+                                var mapping = {
+                                    'templateScenarios': {
+                                        create: function (options) {
+                                            options.data.bound = true;
+                                            options.data.referenceId = options.data._id;
+                                            return new Scenario(options.data);
+                                        }
+                                    }
+                                }
+
+                                var mappingData = { templateScenarios: response };
+                                ko.mapping.fromJS(mappingData, mapping, root);
+                            }
+                        },
+                        error: function (xhr, status, error) {
+                            console.error(error);
+                        }
+                    });
+                });
+            }
+        }
+
+        ko.bindingHandlers.jquerySteps = {
+            init: function (element, valueAccessor) {
+                $(element).steps({
+                    enableCancelButton: true,
+                    onCanceled: function (e) {
+                        window.location.href = '../scenariorepository/' + root.project();
+                    },
+                    bodyTag: 'fieldset',
+                    onStepChanging: function (e, currentIndex, newIndex) {
+                        if (currentIndex > newIndex)
+                            return true;
+
+                        if (newIndex == 2) {
+                            var cleanScenario = getCleanScenario();
+                            root.reviewCleanScenario(getCleanScenario());
+                            cleanScenario.reviewSelectedStep = ko.observable();
+                            cleanScenario.triggerReviewStepAssertions = function (index) {
+                                if (typeof index == 'function') {
+                                    cleanScenario.steps[index()].index = index() + 1;
+                                    cleanScenario.reviewSelectedStep(cleanScenario.steps[index()]);
+                                }
+                            }
+                            root.reviewScenario(cleanScenario);
+                        }
+
+                        if (currentIndex == 0) {
+                            var validity = validateFirstFieldset();
+                            if (validity.valid)
+                                return true;
+                            else
+                                createToaster(undefined, validity.cause, 'error');
+
+                            return false;
+                        } else if (currentIndex == 1) {
+                            var validity = validateSecondFieldset();
+                            if (validity.valid)
+                                return true;
+                            else
+                                createToaster(undefined, validity.cause, 'error');
+
+                            return false;
+                        }
+                    },
+                    onFinished: function (e, currentIndex) {
+                        $(element).submit();
+                    }
+                });
+            }
+        };
+
+        ko.bindingHandlers.datePicker = {
+            init: function (element, valueAccessor) {
+                var observableDate = valueAccessor().date;
+
+                $(element).daterangepicker({
+                    locale: {
+                        cancelLabel: 'Clear'
+                    },
+                    ranges: {
+                        'Today': [moment(), moment()],
+                        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                        'This Month': [moment().startOf('month'), moment().endOf('month')],
+                        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                    },
+                    drops: 'down',
+                    opens: 'center',
+                    minDate: "01/01/2017",
+                    maxDate: moment(),
+                });
+
+                $(element).on('apply.daterangepicker', function (event, picker) {
+                    if (picker.chosenLabel == 'Today')
+                        $($(element).find('span')).html('Updated at ' + picker.startDate.format("MMMM D, YYYY"));
+                    else if (picker.chosenLabel == 'Yesterday')
+                        $($(element).find('span')).html('Updated at ' + picker.startDate.format("MMMM D, YYYY"));
+                    else
+                        $($(element).find('span')).html('Updated from ' + picker.startDate.format("MMMM D, YYYY") + ' to ' + picker.endDate.format("MMMM D, YYYY"));
+                    observableDate(`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                });
+
+                $(element).on('cancel.daterangepicker', function (event, picker) {
+                    $($(element).find('span')).html('Filter by updated date');
+                    observableDate(undefined);
+                });
+            }
+        };
+
+        ko.bindingHandlers.sortableList = {
+            update: function (element, valueAccessor) {
+                var list = valueAccessor().observable;
+                var type = valueAccessor().type;
+                var handler = valueAccessor().handler;
+                $(element).sortable({
+                    cursorAt: { top: 0, left: 0 },
+                    placeholder: 'sort-highlight',
+                    handle: `.${handler}`,
+                    forcePlaceholderSize: true,
+                    update: function (event, ui) {
+                        var item = ko.dataFor(ui.item[0]);
+                        var position = ko.utils.arrayIndexOf(ui.item.parent().children(), ui.item[0]);
+                        list.remove(item);
+                        list.splice(position, 0, item);
+                        list();
+                    }
+                });
+            }
+        };
+
+    }; // end of testScenario Editor view model
+
+    ko.applyBindings(new ScenarioWizardViewModel(), document.getElementById('wrapper-content'));
+
+</script>

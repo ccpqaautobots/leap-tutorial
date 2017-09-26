@@ -1,0 +1,1399 @@
+<script>
+    function PagesViewModel(pages) {
+        var root = this;
+
+        root.pages = ko.observableArray([]);
+        root.project = ko.observable(<%- JSON.stringify(project.projectKey) %>);
+        root.author = ko.observable(<%- JSON.stringify(user.fullname) %>);
+
+        function createToastr(message, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || 'success'](message, 'Object Repository');
+
+            }, 500);
+        };
+
+        root.initSelectorValidation = function () {
+            var len = $("textarea[name^='locator']").length;
+            for (var i = 0; i < len; i++)
+                root.addSelectorValidation(i);
+        };
+
+        root.addSelectorValidation = function (index) {
+            $("textarea[name='locator-" + index + "']").rules("add", {
+                required: true,
+                regex: /([\/][\/]\S+)/,
+                messages: {
+                    required: "Please provide a locator",
+                    regex: "Please provide a locator"
+                }
+            });
+        };
+
+        root.isValidURL = function (str) {
+            var regex = /^(?:(?:https?|ftp):\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z\u00a1-\uffff0-9]-*)*[a-z\u00a1-\uffff0-9]+)(?:\.(?:[a-z\u00a1-\uffff0-9]-*)*[a-z\u00a1-\uffff0-9]+)*(?:\.(?:[a-z\u00a1-\uffff]{2,}))\.?)(?::\d{2,5})?(?:[/?#]\S*)?$/i;
+            if (!regex.test(str)) {
+                return false;
+            } else {
+                return true;
+            }
+        };
+
+        root.containsVariable = function (str) {
+            var regex = /\{\w+\}/
+            if (!regex.test(str)) {
+                return false;
+            } else {
+                return true;
+            }
+        };
+
+        root.confirmationAction = ko.observable();
+        root.confirmationTitle = ko.observable();
+        root.confirmationType = ko.observable();
+        root.confirmationSubText = ko.observable();
+        root.confirmationMessage = ko.observable();
+        root.doAction = ko.observable(false);
+        root.confirmAction = function () {
+            root.doAction(true);
+        };
+
+        $('#modal-confirm').on('hidden.bs.modal', function (e) {
+            if (root.doAction()) {
+                var page = (root.addingPage()) ? root.newPage() : root.selectedPage();
+
+                switch (root.confirmationAction()){
+                    case "savePageConfirm" :
+                        root.savePageConfirm();
+                        break;
+                    case "savePage" :
+                        root.savePage();
+                        break;
+                    case "saveObject" :
+                        page.saveObject();
+                        break;
+                    case "deleteObject" :
+                        page.deleteElement();
+                        break;
+                    case "deletePage" :
+                        page.deletePage();
+                        break;
+                }
+                root.doAction(false);
+            }
+        });
+
+        root.clearModal = function () {
+            $('#modal-confirm').modal('hide');
+            $('body').removeClass('modal-open');
+            $('.modal-backdrop').remove();
+        };
+
+        root.showConfirmationModal = function () {
+            $("#modal-confirm").modal('show');
+        };
+
+        var toggleIcons = {
+            left: 'fa-chevron-left',
+            right: 'fa-chevron-right'
+        };
+        root.toggleEditorIcon = ko.observable(toggleIcons.left);
+        root.expandEditor = ko.observable(false);
+        root.toggleEditor = function () {
+            if (root.toggleEditorIcon() == toggleIcons.left) {
+                root.toggleEditorIcon(toggleIcons.right);
+                root.expandEditor(true);
+            } else {
+                root.toggleEditorIcon(toggleIcons.left);
+                root.expandEditor(false);
+            }
+        };
+
+        root.module = ko.observableArray();
+        root.authors = ko.observableArray();
+        root.types = ko.observableArray();
+        root.updatedBys = ko.observableArray();
+        root.filter = ko.observable(false);
+        root.filterOptions = function () {
+            root.filter(!root.filter());
+        };
+        root.clearFilter = function () {
+            root.selectedModule(undefined);
+            root.selectedAuthor(undefined);
+            root.selectedUpdatedBy(undefined);
+            root.createdDateRange(undefined);
+            root.updatedDateRange(undefined);
+            root.createdSelectedRange(undefined);
+        };
+
+        if (pages) {
+            root.module.unshift('');
+            root.authors.unshift('');
+            root.types.unshift('');
+            root.updatedBys.unshift('');
+            pages.forEach(function (page) {
+                root.pages.push(new Page(page));
+                (!root.module().includes(page.module) && page.module) ? root.module.push(page.module) : null;
+                (!root.authors().includes(page.author) && page.author) ? root.authors.push(page.author) : null;
+                (!root.updatedBys().includes(page.lastUpdatedBy) && page.lastUpdatedBy) ? root.updatedBys.push(page.lastUpdatedBy) : null;
+            });
+        }
+
+        root.selectedModule = ko.observable();
+        root.selectedAuthor = ko.observable();
+        root.selectedType = ko.observable();
+        root.selectedUpdatedBy = ko.observable();
+        root.createdDateRange = ko.observable();
+        root.updatedDateRange = ko.observable();
+        root.filterQuery = ko.computed(function () {
+            var orCondition = [];
+
+            if (root.selectedModule() != '')
+                orCondition.push({ module: root.selectedModule() });
+            if (root.selectedAuthor() != '')
+                orCondition.push({ author: root.selectedAuthor() });
+            if (root.selectedUpdatedBy() != '')
+                orCondition.push({ lastUpdatedBy: root.selectedUpdatedBy() });
+            if (root.createdDateRange()) {
+                var cDate = root.createdDateRange().split('~');
+                orCondition.push({ createdDate: { $gt: cDate.shift(), $lt: cDate.pop() } });
+            }
+            if (root.updatedDateRange()) {
+                var uDate = root.updatedDateRange().split('~');
+                orCondition.push({ updatedDate: { $gt: uDate.shift(), $lt: uDate.pop() } });
+            }
+
+            var query = {
+                project: root.project(),
+                $or: (orCondition.length > 0) ? orCondition : undefined
+            }
+
+            return JSON.parse(JSON.stringify(query));
+        });
+
+        root.filterPages = function () {
+            $.ajax({
+                type: 'POST',
+                url: '/api/getPages',
+                data: JSON.stringify({ query: root.filterQuery() }),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    if (result) {
+                        root.pages.removeAll();
+                        result.forEach(function (page) {
+                            root.pages.push(new Page(page));
+                        });
+                    }
+                }
+            });
+        };
+
+        root.newPage = ko.observable(new Page(undefined, true));
+        root.selectedPage = ko.observable(undefined);
+        root.copiedObject = ko.observable(undefined);
+        root.copyObject = function (type) {
+            if (type !== 'paste') {
+                var element = JSON.parse(ko.toJSON(root.selectedPage().selectedElement()));
+                element._id = undefined;
+                element.author = root.author();
+                element.lastUpdatedBy = undefined;
+                element.createdDate = new Date().toISOString();
+                element.updatedDate = undefined;
+                element.isClone = true;
+                element.edited = true;
+
+                root.copiedObject(new Element(element));
+            }
+
+            if (type == 'clone') {
+                root.selectedPage().elements.push(root.copiedObject());
+                root.selectedPage().selectElement(root.selectedPage().elements().length - 1);
+                root.copiedObject(undefined);
+            } else if (type == 'paste') {
+                root.selectedPage().elements.push(root.copiedObject());
+                root.selectedPage().selectElement(root.selectedPage().elements().length - 1);
+                root.copiedObject(undefined);
+            }
+        };
+        root.displayPageElement = ko.observable(true);
+
+        root.saveUnsavedElements = function () {
+            var queue = [];
+            root.selectedPage().elements().forEach(function (element, index) {
+                if (element.edited()) {
+                    root.selectedPage().selectElement(index);
+                    root.selectedPage().saveObject();
+                }
+            })
+        };
+
+        function Page(page, isNew) {
+            var self = this;
+            self.oldModule = ko.observable((page) ? page.module : undefined);
+            self.oldName = ko.observable((page) ? page.name : undefined);
+            self.oldDescription = ko.observable((page) ? page.description : undefined);
+            self.oldUrl = ko.observable((page) ? page.url : undefined);
+
+            self.id = ko.observable((page) ? page._id : undefined);
+            self.project = ko.observable((page) ? page.project : root.project());
+            self.module = ko.observable((page) ? page.module : undefined);
+            self.name = ko.observable((page) ? page.name : undefined);
+            self.description = ko.observable((page) ? page.description : undefined);
+            self.url = ko.observable((page) ? page.url : undefined);
+            self.author = ko.observable((page) ? page.author : (isNew) ? root.author() : undefined);
+            self.lastUpdatedBy = ko.observable((page) ? page.lastUpdatedBy : undefined);
+            self.createdDate = ko.observable((page) ? page.createdDate : undefined);
+            self.updatedDate = ko.observable((page) ? page.updatedDate : undefined);
+            self.elements = ko.observableArray();
+            if (page)
+                if (page.elements) {
+                    page.elements.forEach(function (element) {
+                        self.elements.push(new Element(element));
+                    })
+                };
+            self.newObject = ko.observable(new Element(undefined, true));
+
+            self.edited = ko.observable(false);
+            self.module.subscribe(function () {
+                (self.oldModule() != self.module()) ? self.edited(true) : self.edited(false);
+            });
+            self.name.subscribe(function () {
+                (self.oldName() != self.name()) ? self.edited(true) : self.edited(false);
+            });
+            self.description.subscribe(function () {
+                (self.oldDescription() != self.description()) ? self.edited(true) : self.edited(false);
+            });
+            self.url.subscribe(function () {
+                (self.oldUrl() != self.url()) ? self.edited(true) : self.edited(false);
+            });
+
+            self.updatePage = function () {
+                self.oldModule(ko.toJS(self.module()));
+                self.oldName(ko.toJS(self.name()));
+                self.oldDescription(ko.toJS(self.description()));
+                self.oldUrl(ko.toJS(self.url()));
+                self.edited(false);
+            };
+
+
+            self.cancelChanges = function () {
+                self.module(ko.toJS(self.oldModule()));
+                self.name(ko.toJS(self.oldName()));
+                self.description(ko.toJS(self.oldDescription()));
+                self.url(ko.toJS(self.oldUrl()));
+                self.edited(false);
+            }
+
+            self.hasUniqueName = ko.observable(true);
+            self.hasUrlVariable = ko.observable(true);
+            self.saveObjectConfirm = function () {
+                if ($("#object-form").valid()) {
+                    self.selectedElement().name(self.selectedElement().name().trim());
+                    if (!self.selectedElement().new()) {
+                        root.confirmationMessage("<h4>Changes to this object will be saved.</h4>");
+                        root.confirmationAction("saveObject");
+                        root.confirmationTitle("Confirmation");
+                        root.confirmationType("panel-primary");
+                        root.confirmationSubText("Are you sure you want to proceed?");
+                        root.showConfirmationModal();
+                    } else {
+                        self.saveObject();
+                    }
+                }
+            };
+
+            self.saveObject = function () {
+                if ($("#object-form").valid()) {
+                    if (self.selectedElement().new() || self.selectedElement().isClone()) {
+                        if (self.selectedElement().new()) {
+                            self.selectedElement().new(false);
+                            $.ajax({
+                                type: 'POST',
+                                url: '/api/pages/elements',
+                                data: JSON.stringify({ pageId: self.id(), element: JSON.parse(ko.toJSON(self.selectedElement())) }),
+                                contentType: 'application/json; charset=utf-8',
+                                dataType: 'json',
+                                success: function (result) {
+                                    if (result.success) {
+                                        self.selectedElement()._id(result.element);
+                                        self.selectedElement().updateElement();
+                                        createToastr(result.message, 'success');
+                                    } else {
+                                        self.selectedElement().new(true);
+                                        createToastr(result.message, 'error');
+                                    }
+                                }
+                            });
+                        } else {
+                            if (self.selectedElement().isClone()) {
+                                $.ajax({
+                                    type: 'POST',
+                                    url: '/api/pages/elements',
+                                    data: JSON.stringify({ pageId: self.id(), element: JSON.parse(ko.toJSON(self.selectedElement())) }),
+                                    contentType: 'application/json; charset=utf-8',
+                                    dataType: 'json',
+                                    success: function (result) {
+                                        if (result.success) {
+                                            self.selectedElement()._id(result.element);
+                                            self.selectedElement().updateElement();
+                                            self.selectedElement().isClone(false);
+                                            createToastr(result.message, 'success');
+                                        } else {
+                                            createToastr(result.message, 'error');
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    } else {
+                        self.selectedElement().lastUpdatedBy(root.author());
+                        self.selectedElement().updatedDate(new Date().toISOString());
+                        $.ajax({
+                            type: 'PUT',
+                            url: '/api/pages/elements',
+                            data: JSON.stringify({ pageId: self.id(), element: JSON.parse(ko.toJSON(self.selectedElement())) }),
+                            contentType: 'application/json; charset=utf-8',
+                            dataType: 'json',
+                            success: function (result) {
+                                if (result.success) {
+                                    self.elements().filter(_ => _._id() == result.element)[0].updateElement();
+                                    createToastr(result.message, 'success');
+                                } else {
+                                    createToastr(result.message, 'error');
+                                }
+                            }
+                        });
+                    }
+                }
+            };
+            self.selectedElement = ko.observable(undefined);
+            self.selectElement = function (index) {
+                self.selectedElement(self.elements()[(typeof index == 'function') ? index() : index]);
+            };
+
+            self.deleteElementConfirm = function () {
+           
+                root.confirmationMessage("<h4>This object will be permanently deleted.</h4>");
+                root.confirmationAction("deleteObject");
+                root.confirmationTitle("Warning");
+                root.confirmationType("panel-warning");
+                root.confirmationSubText("Are you sure you want to proceed?");
+                root.showConfirmationModal();
+            };
+
+            self.deletePageConfirm = function () {
+           
+                root.confirmationMessage("<h4>This page will be permanently deleted.</h4>");
+                root.confirmationAction("deletePage");
+                root.confirmationTitle("Warning");
+                root.confirmationType("panel-warning");
+                root.confirmationSubText("Are you sure you want to proceed?");
+                root.showConfirmationModal();
+            };
+
+            self.deleteElement = function () {
+                root.showPageData(function(){return root.pages.indexOf(root.selectedPage());});
+                if (!self.selectedElement()._id()) {
+                    self.elements.remove(self.selectedElement());
+                    return;
+                }
+
+                $.ajax({
+                    type: 'DELETE',
+                    url: '/api/pages/elements',
+                    data: JSON.stringify({ pageId: self.id(), element: JSON.parse(ko.toJSON(self.selectedElement())) }),
+                    contentType: 'application/json; charset=utf-8',
+                    dataType: 'json',
+                    success: function (result) {
+                        if (result.success) {
+                            self.elements.remove(self.selectedElement());
+                            createToastr(result.message, 'success');
+                        } else {
+                            createToastr(result.message, 'error');
+                        }
+                    }
+                });
+            };
+            self.deletePage = function () {
+                $.ajax({
+                    type: 'DELETE',
+                    url: '/api/pages',
+                    data: { pageId: self.id() },
+                    success: function (result) {
+                        if (result.success) {
+                            var index = root.pages.indexOf(root.pages().find(_ => _.id() == self.id()));
+                            root.pages.splice(index, 1);
+                            createToastr(result.message, 'success');
+                        } else {
+                            createToastr(result.message, 'error');
+                        }
+                    }
+                })
+            }
+        };
+
+        function Element(element, isNew) {
+            var self = this;
+            self.types = ko.observableArray(["input", "link", "button", "text", "checkbox", "radiobutton", "frame", "table", "others"]);
+            self.oldType = ko.observable((element) ? element.type : undefined);
+            self.oldName = ko.observable((element) ? element.name : undefined);
+            self.oldSelectors = ko.observableArray();
+            self.oldSelectedRadio = ko.observable(0);
+
+            self._id = ko.observable((element) ? element._id : undefined);
+            self.type = ko.observable((element) ? element.type : undefined);
+            self.name = ko.observable((element) ? element.name : undefined);
+            self.author = ko.observable((element) ? element.author : (isNew) ? root.author() : undefined);
+            self.lastUpdatedBy = ko.observable((element) ? element.lastUpdatedBy : undefined);
+            self.createdDate = ko.observable((element) ? element.createdDate : (isNew) ? new Date().toISOString() : undefined);
+            self.updatedDate = ko.observable((element) ? element.updatedDate : undefined);
+            self.new = ko.observable((element) ? element.new : false);
+
+            self.placeHolderName = ko.observable();
+            if (element){
+                if (!element.name){
+                    self.placeHolderName("[new object]");
+                } else {
+                    self.placeHolderName(element.name);
+                }
+            }
+
+
+            self.isClone = ko.observable((element) ? element.isClone : false);
+            self.edited = ko.observable((element) ? element.edited : false);
+
+            self.selectors = ko.observableArray();
+            self.selectedRadio = ko.observable(0).extend({ notify: 'always' }); // extend notify always -> notify even there are no changes
+            self.hasSelector = ko.observable(undefined);
+
+            self.checkSelectors = function () {
+                (self.selectors().length > 0) ? self.hasSelector(true) : self.hasSelector(undefined);
+            }
+
+            if (element) {
+                if (element.selectors) {
+                    element.selectors.forEach(function (selector) {
+                        self.selectors.push(new Selector(selector, false, self));
+                        self.oldSelectors.push(new Selector(selector, false, self));
+                    });
+                    var index = self.selectors().indexOf(self.selectors().filter(_ => _.default() == true)[0]);
+                    self.selectedRadio(index);
+                    self.oldSelectedRadio(index);
+                }
+            } else {
+                self.selectors.push(new Selector(undefined, true, self));
+                self.oldSelectors.push(new Selector(undefined, true, self));
+                self.selectedRadio(0);
+                self.oldSelectedRadio(0);
+            }
+            self.checkSelectors();
+
+            self.type.subscribe(function () {
+                (self.oldType() != self.type()) ? self.edited(true) : self.edited(false);
+            });
+            self.name.subscribe(function () {
+                (self.oldName() != self.name()) ? self.edited(true) : self.edited(false);
+            });
+            self.selectors.subscribe(function () {
+                (self.oldSelectors() != self.selectors()) ? self.edited(true) : self.edited(false);
+                self.checkSelectors();
+
+                if (self.selectors()[self.selectedRadio()] == undefined)
+                    self.selectedRadio(0);
+            });
+
+            self.updateElement = function () {
+                self.oldType(ko.toJS(self.type()));
+                self.oldName(ko.toJS(self.name()));
+
+                self.oldSelectors().length = 0;
+                self.selectors().forEach(function (selector) {
+                    self.oldSelectors.push(new Selector(ko.toJS(selector), false, self));
+                });
+
+                //self.oldSelectors(ko.toJS(self.selectors()));
+                self.oldSelectedRadio(ko.toJS(self.selectedRadio()));
+                self.edited(false);
+            };
+
+            self.cancelChanges = function () {
+                self.type(ko.toJS(self.oldType()));
+                self.name(ko.toJS(self.oldName()));
+
+                self.selectors().length = 0;
+                self.oldSelectors().forEach(function (selector) {
+                    self.selectors.push(new Selector(ko.toJS(selector), false, self));
+                });
+
+                //self.selectors(ko.toJS(self.oldSelectors()));
+                self.selectedRadio(ko.toJS(self.oldSelectedRadio()));
+                if (self.isClone() || self.new()){
+                    root.selectedPage().elements.splice(root.selectedPage().elements.indexOf(self),1);
+                    root.showPageData(function(){return root.pages.indexOf(root.selectedPage());});
+                }
+                    
+                self.edited(false);
+            };
+
+            self.addSelector = function () {
+                var selector = new Selector(undefined, true, self);
+                selector.animClass("fadeIn");
+                self.selectors.push(selector);
+                // if this is the first selector -> set selectedRadio to index 0
+                if (self.selectors().length == 1)
+                    self.selectedRadio(0);
+
+                var index = self.selectors().length - 1;
+                $("#object-form").validate();
+                root.addSelectorValidation(index);
+                self.edited(true);
+            }
+
+            self.removeSelector = function (selector) {
+                var index = self.selectors().indexOf(selector);
+                selector.animClass("fadeOut");
+                $('#selector-' + index).fadeOut(500, function () {
+                    self.selectors.remove(selector);
+                    if (index > (self.selectors().length - 1) && selector.default()) {
+                        if (self.selectors().length != 0)
+                            self.selectedRadio(self.selectors().length - 1);
+                    }
+                    self.edited(true);
+                });
+            }
+
+            self.selectedRadio.subscribe(function (newIndex) {
+                self.selectors().forEach(function (selector) {
+                    selector.default(false);
+                });
+
+                if (self.selectors()[newIndex])
+                    self.selectors()[newIndex].default(true);
+                self.edited(true);
+            });
+
+            self.name.subscribe( function() {
+                self.placeHolderName(self.name());
+            });
+        };
+
+        function Selector(selector, isNew, parent) {
+            var self = this;
+            self.oldSelector = ko.observable((selector) ? selector.selector : undefined);
+            self.oldDefault = ko.observable((selector) ? selector.default : false);
+            self.oldResponsiveMode = ko.observable((selector) ? selector.responsiveMode : undefined);
+            self.oldOs = ko.observable((selector) ? selector.os : undefined);
+            self.oldBrowser = ko.observable((selector) ? selector.browser : undefined);
+
+            self._id = ko.observable((selector) ? selector._id : undefined);
+            self.selector = ko.observable((selector) ? selector.selector : (isNew) ? '//' : undefined);
+            self.default = ko.observable((selector) ? selector.default : false);
+            self.responsiveMode = ko.observable((selector) ? selector.responsiveMode : false);
+            self.os = ko.observable((selector) ? selector.os : "windows");
+            self.browser = ko.observable((selector) ? selector.browser : "firefox");
+
+            self.isClone = ko.observable((selector) ? selector.isClone : false);
+            self.edited = ko.observable((selector) ? selector.edited : false);
+            self.animClass = ko.observable();
+            
+            self.selector.subscribe(function () {
+                (self.oldSelector() != self.selector()) ? parent.edited(true) : parent.edited(false);
+            });
+
+            self.default.subscribe(function () {
+                (self.oldDefault() != self.default()) ? parent.edited(true) : parent.edited(false);
+            });
+
+            self.responsiveMode.subscribe(function () {
+                (self.oldResponsiveMode() != self.responsiveMode()) ? parent.edited(true) : parent.edited(false);
+            });
+
+            self.os.subscribe(function () {
+                (self.oldOs() != self.os()) ? parent.edited(true) : parent.edited(false);
+            });
+
+            self.browser.subscribe(function () {
+                (self.oldBrowser() != self.browser()) ? parent.edited(true) : parent.edited(false);
+            });
+
+            self.updateSelector = function () {
+                self.oldSelector(ko.toJS(self.selector()));
+                self.oldDefault(ko.toJS(self.default()));
+                self.oldResponsiveMode(ko.toJS(self.responsiveMode()));
+                self.oldOs(ko.toJS(self.os()));
+                self.oldBrowser(ko.toJS(self.browser()));
+                parent.edited(false);
+            };
+        };
+
+
+        root.showEditButton = ko.observable(true);
+
+        root.getIcon = function (element) {
+            var type = element.type();
+            if (type == 'button')
+                return 'square-o'
+            else if (type == 'link')
+                return 'link'
+            else if (type == 'text' || type == 'input')
+                return 'pencil'
+            else if (type == 'checkbox')
+                return 'check-square-o'
+            else if (type == 'radiobutton')
+                return 'dot-circle-o'
+            else if (type == 'frame')
+                return 'file-code-o'
+            else if (type == 'table')
+                return 'table'
+
+            return 'cube'
+        };
+
+        root.addingObject = ko.observable(false);
+        root.addObject = function () {
+            root.addingObject(false);
+            root.showEditButton(false);
+
+            var element = new Element(JSON.parse(ko.toJSON(root.selectedPage().newObject())));
+            element.new(true);
+            element.selectedRadio(0);
+            element.oldSelectedRadio(0);
+            root.selectedPage().elements.push(element);
+            root.selectedPage().selectElement(root.selectedPage().elements().length - 1);
+
+            root.displayPageElement(false);
+        };
+
+        root.addingPage = ko.observable(false);
+        root.addPage = function () {
+            root.enablePageEdit(false);
+            root.addingPage(true);
+            root.showEditButton(false);
+            root.displayPageElement(true);
+        };
+        root.enablePageEdit = ko.observable(false);
+        root.enableDisablePageEdit = function () {
+            root.enablePageEdit(!root.enablePageEdit());
+        };
+    
+        root.savePageConfirm = function () {
+
+            if ($("#page-form").valid()){                
+                if (!root.addingPage()){
+                    root.confirmationMessage("<h4>Changes to this page will be saved.</h4>");
+                    root.confirmationAction("savePage");
+                    root.confirmationTitle("Confirmation");
+                    root.confirmationType("panel-primary");
+                    root.confirmationSubText("Are you sure you want to proceed?");
+                    root.showConfirmationModal();
+                } else {
+                    root.savePage();
+                }
+                
+            }
+        };
+        
+        root.savePageWarn = function () {
+            if ($("#page-form").valid()){
+                var page = (root.addingPage()) ? root.newPage() : root.selectedPage();
+                var hasUrlVariable;
+                (root.isValidURL(page.url()) || !root.containsVariable(page.url())) ? hasUrlVariable = false : hasUrlVariable = true;
+                
+                var hasUniqueName;
+                $.ajax({
+                    type: 'POST',
+                    url: '/api/pages/duplicate',
+                    data: JSON.stringify({ page: JSON.parse(ko.toJSON(page)) }),
+                    contentType: 'application/json; charset=utf-8',
+                    dataType: 'json',
+                    success: function (result) {
+                        if (result.success) {
+                            hasUniqueName = false;
+                        } else {
+                            (result.message == "Page is unique.") ? hasUniqueName = true : createToastr(result.message, 'error');
+                        }
+                        var confirmationMessage = "";
+                    
+                        if (!hasUniqueName && !hasUrlVariable)
+                            confirmationMessage += "<h4>Please review the following issues before proceeding:</h4><br/>";
+                        
+                        if (!hasUniqueName){
+                            confirmationMessage += "<p>A page with the same name already exists.</p><br/>";
+                            if (hasUrlVariable)
+                                confirmationMessage = "<h4>" + confirmationMessage + "</h4>";
+                        }                            
+
+                        if (!hasUrlVariable){
+                            confirmationMessage += "<p>A URL variable is not used in the given URL.</p><br/>";
+                            if (hasUniqueName)
+                                confirmationMessage = "<h4>" + confirmationMessage + "</h4>";
+                        }                            
+                        
+                        if (!hasUniqueName || !hasUrlVariable){
+                            root.confirmationMessage(confirmationMessage);
+                            root.confirmationAction("savePageConfirm");
+                            root.confirmationTitle("Warning");
+                            root.confirmationType("panel-warning");
+                            root.confirmationSubText("Are you sure you want to proceed?");
+                            root.showConfirmationModal();         
+                        
+                        } else {
+                            root.savePageConfirm();
+                        }                
+                    }
+                });
+            }
+        };
+
+        root.savePage = function () {
+            if ($("#page-form").valid()) {
+                if (root.addingPage()) {
+                    $.ajax({
+                        type: 'POST',
+                        url: '/api/pages',
+                        data: JSON.stringify({ page: JSON.parse(ko.toJSON(root.newPage())) }),
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        success: function (result) {
+                            if (result.success) {
+                                root.newPage().updatePage();
+                                root.newPage().id(result.page);
+                                root.pages.push(root.newPage());
+                                root.newPage(new Page(undefined, true));
+                                //self.newObject().updateElement();
+                                root.addingPage(false);
+                                root.enableDisablePageEdit()
+                                createToastr(result.message, 'success');
+                            } else {
+                                createToastr(result.message, 'error');
+                            }
+                        }
+                    });
+                } else {
+                    root.selectedPage().lastUpdatedBy(root.author());
+                    $.ajax({
+                        type: 'PUT',
+                        url: '/api/pages',
+                        data: JSON.stringify({ page: JSON.parse(ko.toJSON(root.selectedPage())) }),
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        success: function (result) {
+                            if (result.success) {
+                                root.selectedPage().updatePage();
+                                root.enableDisablePageEdit();
+                                createToastr(result.message, 'success');
+                            } else {
+                                createToastr(result.message, 'error');
+                            }
+                        }
+                    });
+                }
+            }
+        };
+
+        root.showPageData = function (index) {
+            root.enablePageEdit(true);
+            root.addingPage(false);
+            root.showEditButton(true);
+            root.displayPageElement(true);
+            root.selectedPage(root.pages()[index()]);
+        };
+
+        root.showElementData = function (parent, index) {
+            root.selectedPage((root.pages().filter(_ => _.name() == parent.name()))[0]);
+            root.selectedPage().selectElement(index);
+            root.addingObject(false);
+            root.showEditButton(true);
+            root.displayPageElement(false);
+            root.initSelectorValidation();
+        };
+
+        root.expandAll = function (data, event) {
+            $($('#pages-view').find('div')).each(function (index, div) {
+                $($($(div).find('i')).first()).switchClass('fa-caret-down', 'fa-caret-up');
+                $($(div).next()).show();
+            });
+        };
+
+        root.collapseAll = function (data, event) {
+            $($('#pages-view').find('div')).each(function (index, div) {
+                $($($(div).find('i')).first()).switchClass('fa-caret-up', 'fa-caret-down');
+                $($(div).next()).hide();
+            });
+        };
+
+        root.pageSortAsc = function (param) {
+            root.pages.sort(function (a, b) {
+                switch (param) {
+                    case 'name':
+                        var ax = a.name().toUpperCase();
+                        var bx = b.name().toUpperCase();
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'created':
+                        var ax = new Date(a.createdDate());
+                        var bx = new Date(b.createdDate());
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'updated':
+                        var ax = new Date(a.updatedDate());
+                        var bx = new Date(b.updatedDate());
+                        if (ax == bx)
+                            return 0;
+
+                        if (ax == 'Invalid Date' && bx != 'Invalid Date')
+                            return 1;
+                        else if (ax != 'Invalid Date' && bx == 'Invalid Date')
+                            return -1;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                }
+            });
+        };
+
+        root.pageSortDesc = function (param) {
+            root.pages.sort(function (a, b) {
+                switch (param) {
+                    case 'name':
+                        var ax = a.name().toUpperCase();
+                        var bx = b.name().toUpperCase();
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'type':
+                        var ax = a.type().toUpperCase();
+                        var bx = b.type().toUpperCase();
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'created':
+                        var ax = new Date(a.createdDate());
+                        var bx = new Date(b.createdDate());
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'updated':
+                        var ax = new Date(a.updatedDate());
+                        var bx = new Date(b.updatedDate());
+                        if (ax == bx)
+                            return 0;
+
+                        if (ax == 'Invalid Date' && bx != 'Invalid Date')
+                            return 1;
+                        else if (ax != 'Invalid Date' && bx == 'Invalid Date')
+                            return -1;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                }
+            }).reverse();
+        };
+
+        root.elementSortAsc = function (param) {
+            root.pages().filter(_ => _.name() == root.selectedPage().name())[0].elements.sort(function (a, b) {
+                switch (param) {
+                    case 'name':
+                        var ax = a.name().toUpperCase();
+                        var bx = b.name().toUpperCase();
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'type':
+                        var ax = a.type().toUpperCase();
+                        var bx = b.type().toUpperCase();
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'created':
+                        var ax = new Date(a.createdDate());
+                        var bx = new Date(b.createdDate());
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'updated':
+                        var ax = new Date(a.updatedDate());
+                        var bx = new Date(b.updatedDate());
+                        if (ax == bx)
+                            return 0;
+
+                        if (ax == 'Invalid Date' && bx != 'Invalid Date')
+                            return 1;
+                        else if (ax != 'Invalid Date' && bx == 'Invalid Date')
+                            return -1;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                }
+            });
+        };
+
+        root.elementSortDesc = function (param) {
+            root.pages().filter(_ => _.name() == root.selectedPage().name())[0].elements.sort(function (a, b) {
+                switch (param) {
+                    case 'name':
+                        var ax = a.name().toUpperCase();
+                        var bx = b.name().toUpperCase();
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'created':
+                        var ax = new Date(a.createdDate());
+                        var bx = new Date(b.createdDate());
+                        if (ax == bx)
+                            return 0;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                    case 'updated':
+                        var ax = new Date(a.updatedDate());
+                        var bx = new Date(b.updatedDate());
+                        if (ax == bx)
+                            return 0;
+
+                        if (ax == 'Invalid Date' && bx != 'Invalid Date')
+                            return 1;
+                        else if (ax != 'Invalid Date' && bx == 'Invalid Date')
+                            return -1;
+
+                        return (ax > bx) ? 1 : -1;
+                        break;
+                }
+            }).reverse();
+        };
+
+        ko.bindingHandlers.collapsible = {
+            init: function (element, valueAccessor) {
+                $(element).on('click', function (e) {
+                    var list = $($($(element).parent()).next());
+                    var caret = $(element);
+                    if (list.css('display') == 'none') {
+                        caret.switchClass('fa-caret-down', 'fa-caret-up');
+                        list.show();
+                    } else {
+                        caret.switchClass('fa-caret-up', 'fa-caret-down');
+                        list.hide();
+                    }
+                })
+            }
+        };
+
+        root.createdSelectedRange = ko.observable();
+        root.createdSelectedDate = ko.observable();
+        root.updatedDateRanges = ko.computed(function () {
+            var obj = {
+                'Today': [moment(), moment()],
+                'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                'This Month': [moment().startOf('month'), moment().endOf('month')],
+                'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+            };
+
+            if (root.createdSelectedRange() == 'Today') {
+                return obj = {
+                    'Today': [moment(), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Yesterday') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 7 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last 30 Days') {
+                return obj = {
+                    'Today': [moment(), moment()],
+                    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                    'Last 30 Days': [moment().subtract(29, 'days'), moment()]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Last Month') {
+                return obj = {
+                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'This Month') {
+                return obj = {
+                    'This Month': [moment().startOf('month'), moment().endOf('month')]
+                }
+            }
+
+            if (root.createdSelectedRange() == 'Custom Range') {
+                return obj = {};
+            }
+
+            return obj;
+        });
+
+        ko.bindingHandlers.datePicker = {
+            init: function (element, valueAccessor) {
+                $(element).daterangepicker({
+                    locale: {
+                        cancelLabel: 'Clear'
+                    },
+                    ranges: {
+                        'Today': [moment(), moment()],
+                        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                        'This Month': [moment().startOf('month'), moment().endOf('month')],
+                        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                    },
+                    drops: 'down',
+                    opens: 'center',
+                    minDate: '01/01/2017',
+                    maxDate: moment()
+                });
+
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+
+                $(element).on('apply.daterangepicker', function (event, picker) {
+                    if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                        $($(element).find('span')).html(`${pickerType} at ${picker.startDate.format("MMMM D, YYYY")}`);
+                    } else {
+                        $($(element).find('span')).html(`${pickerType} from ${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                    }
+
+                    if (pickerType == 'Created') {
+                        if (picker.chosenLabel == 'Custom Range')
+                            root.createdSelectedDate(`${picker.startDate.format('YYYY-MM-DD')}~${picker.endDate.format('YYYY-MM-DD')}`);
+                        root.createdSelectedRange(picker.chosenLabel);
+                        root.updatedDateRange(undefined);
+                    }
+
+                    root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                });
+
+                $(element).on('cancel.daterangepicker', function (event, picker) {
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                    root[observable](undefined);
+                });
+            },
+            update: function (element, valueAccessor) {
+                var pickerType = $(element).data('picker-date');
+                var observable = $(element).data('picker-observable');
+                if (!root[observable]())
+                    $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+
+                if (pickerType == 'Updated') {
+                    var min;
+                    var max;
+                    if (root.createdSelectedRange() == 'Custom Range') {
+                        var range = root.createdSelectedDate().split('~');
+                        min = range.shift();
+                        max = range.pop();
+                    }
+                    $(element).daterangepicker({
+                        locale: {
+                            cancelLabel: 'Clear'
+                        },
+                        ranges: root.updatedDateRanges(),
+                        drops: 'down',
+                        opens: 'center',
+                        minDate: (min) ? moment(min) : '01/01/2017',
+                        maxDate: (max) ? moment(max) : moment()
+                    });
+
+                    var pickerType = $(element).data('picker-date');
+                    var observable = $(element).data('picker-observable');
+
+                    $(element).on('apply.daterangepicker', function (event, picker) {
+                        if (picker.chosenLabel == 'Today' || picker.chosenLabel == 'Yesterday') {
+                            $($(element).find('span')).html(`${pickerType} at ${picker.startDate.format("MMMM D, YYYY")}`);
+                        } else {
+                            $($(element).find('span')).html(`${pickerType} from ${picker.startDate.format("MMMM D, YYYY")} to ${picker.endDate.format("MMMM D, YYYY")}`);
+                        }
+
+                        root[observable](`${picker.startDate.format('YYYY-MM-DDT00:00:00')}~${picker.endDate.format('YYYY-MM-DDT23:59:59')}`);
+                    });
+
+                    $(element).on('cancel.daterangepicker', function (event, picker) {
+                        $($(element).find('span')).html(`Filter by ${pickerType.toLowerCase()} date`);
+                        root[observable](undefined);
+                    });
+                }
+            }
+        }
+
+        ko.bindingHandlers.validate = {
+            init: function (element, valueAccessor) {
+                $.validator.addMethod("regex", function (value, element, regexpr) {
+                    return regexpr.test(value);
+                }, "");
+                $(element).validate({
+                    errorClass: 'error jquery-invalid',
+                    ignore: "",
+                    rules: {
+                        objectType: {
+                            required: true
+                        },
+                        objectName: {
+                            required: true
+                        },
+                        pageName: {
+                            required: true
+                        },
+                        module: {
+                            required: true
+                        },
+                        url: {
+                            required: true
+                        },
+                        selectorValidation: {
+                            required: true
+                        },
+                        "locator-0": {
+                            required: true,
+                            regex: /([\/][\/]\S+)/
+                        }
+                    },
+                    messages: {
+                        objectType: {
+                            required: 'Please provide a selector type'
+                        },
+                        objectName: {
+                            required: 'Please provide a selector name'
+                        },
+                        pageName: {
+                            required: 'Please provide a page name'
+                        },
+                        module: {
+                            required: 'Please provide a module'
+                        },
+                        url: {
+                            required: 'Please provide a url'
+                        },
+                        selectorValidation: {
+                            required: 'Please provide a selector'
+                        },
+                        "locator-0": {
+                            required: "Please provide a locator",
+                            regex: "Please provide a locator"
+                        }
+                    }
+                })
+            }
+        };
+
+        ko.bindingHandlers.defaultContextMenu = {
+            init: function (element, valueAccessor) {
+                // Open context menu
+                $(element).on("contextmenu", function (e) {
+                    // return native menu if pressing control
+                    if (e.ctrlKey) return;
+
+                    $('#elementContextMenu').hide();
+                    $('#pageContextMenu').hide();
+
+                    //open menu
+                    var $menu = $('#defaultContextMenu')
+                        .data("invokedOn", $(e.target))
+                        .show()
+                        .css({
+                            position: "absolute",
+                            left: getMenuPosition(e.clientX, 'width', 'scrollLeft'),
+                            top: getMenuPosition(e.clientY, 'height', 'scrollTop')
+                        })
+                        .off('click')
+                        .on('click', 'li', function (e) {
+                            /*if(e.target.getAttribute('data-submenu') == null) {
+                                $menu.hide();
+                            } else {
+                                $menu.hide();
+                            } */
+                            $menu.hide();
+                        });
+
+                    return false;
+                });
+
+                function getMenuPosition(mouse, direction, scrollDir) {
+                    var win = $(window)[direction](),
+                        scroll = $(window)[scrollDir](),
+                        menu = $('#pageContextMenu')[direction](),
+                        position = mouse + scroll;
+
+                    if (direction == 'width')
+                        position -= $('#sidebar').width();
+
+                    // opening menu would pass the side of the page
+                    if (mouse + menu > win && menu < mouse)
+                        position -= menu;
+
+                    return position;
+                };
+
+                //make sure menu closes on any click
+                $('body').click(function () {
+                    $('#defaultContextMenu').hide();
+                });
+            }
+        };
+
+        ko.bindingHandlers.pageContextMenu = {
+            init: function (element, valueAccessor) {
+                // Open context menu
+                $(element).on("contextmenu", function (e) {
+                    var params = valueAccessor();
+                    root.displayPageElement(true);
+                    root.addingPage(false);
+                    root.showPageData(params.index);
+
+                    // return native menu if pressing control
+                    if (e.ctrlKey) return;
+
+                    $('#elementContextMenu').hide();
+                    $('#defaultContextMenu').hide()
+
+                    //open menu
+                    var $menu = $('#pageContextMenu')
+                        .data("invokedOn", $(e.target))
+                        .show()
+                        .css({
+                            position: "absolute",
+                            left: getMenuPosition(e.clientX, 'width', 'scrollLeft'),
+                            top: getMenuPosition(e.clientY, 'height', 'scrollTop')
+                        })
+                        .off('click')
+                        .on('click', 'li', function (e) {
+                            $menu.hide();
+                        })
+
+                    return false;
+                });
+
+                function getMenuPosition(mouse, direction, scrollDir) {
+                    var win = $(window)[direction](),
+                        scroll = $(window)[scrollDir](),
+                        menu = $('#pageContextMenu')[direction](),
+                        position = mouse + scroll;
+
+                    if (direction == 'width')
+                        position -= $('#sidebar').width();
+
+                    // opening menu would pass the side of the page
+                    if (mouse + menu > win && menu < mouse)
+                        position -= menu;
+
+                    return position;
+                };
+
+                //make sure menu closes on any click
+                $('body').click(function () {
+                    $('#pageContextMenu').hide();
+                });
+            }
+        };
+
+        ko.bindingHandlers.elementContextMenu = {
+            init: function (element, valueAccessor) {
+                // Open context menu
+                $(element).on("contextmenu", function (e) {
+                    var params = valueAccessor();
+                    root.showElementData(params.page, params.index);
+                    root.addingObject(false);
+                    root.displayPageElement(false);
+
+                    // return native menu if pressing control
+                    if (e.ctrlKey) return;
+
+                    $('#pageContextMenu').hide();
+                    $('#defaultContextMenu').hide()
+
+                    //open menu
+                    var $menu = $('#elementContextMenu')
+                        .data("invokedOn", $(e.target))
+                        .show()
+                        .css({
+                            position: "absolute",
+                            left: getMenuPosition(e.clientX, 'width', 'scrollLeft'),
+                            top: getMenuPosition(e.clientY, 'height', 'scrollTop')
+                        })
+                        .off('click')
+                        .on('click', 'li', function (e) {
+                            $menu.hide();
+
+                            /*var $invokedOn = $menu.data("invokedOn");
+                            var $selectedMenu = $(e.target);
+                            
+                            menuSelected($invokedOn, $selectedMenu);*/
+                        })
+
+                    return false;
+                });
+
+                function getMenuPosition(mouse, direction, scrollDir) {
+                    var win = $(window)[direction](),
+                        scroll = $(window)[scrollDir](),
+                        menu = $('#elementContextMenu')[direction](),
+                        position = mouse + scroll;
+
+                    if (direction == 'width')
+                        position -= $('#sidebar').width();
+
+                    // opening menu would pass the side of the page
+                    if (mouse + menu > win && menu < mouse)
+                        position -= menu;
+
+                    return position;
+                };
+
+                /*function menuSelected(invokedOn, selectedMenu) {
+                    var msg = "You selected the menu item '" + selectedMenu.text() +
+                        "' on the value '" + invokedOn.text() + "'";
+                    console.log(msg);
+                }*/
+
+                //make sure menu closes on any click
+                $('body').click(function () {
+                    $('#elementContextMenu').hide();
+                });
+            }
+        };
+    };
+
+    ko.applyBindings(new PagesViewModel(<%- JSON.stringify(pages) %>), document.getElementById('wrapper-content'));
+
+</script>

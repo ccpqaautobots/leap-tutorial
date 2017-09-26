@@ -1,0 +1,72 @@
+<script src="/js/plugins/moment/moment.min.js" type="text/javascript"></script>
+<style>
+    .clearLoading {
+        display: none !important;
+    }
+</style>
+<div id="pagecontent">
+    <div class="row">
+        <!-- ko foreach: $root.repositories -->
+            <div class="col-lg-3">
+                <div class="ibox float-e-margins">
+                    <div class="ibox-title">
+                        <span class="pull-right" >
+                            <i data-bind="css: $data.icon" style="color: lightgray;" class="fa fa-fw fa-2x"></i>
+                        </span>
+                        <h3 data-bind="text: $data.name"></h3>
+                    </div>
+                    <div class="ibox-content">
+                        <h5>Projects:</h5>
+                        <ul data-bind="foreach: $root.projects">
+                            <li style="list-style: none;">
+                                <a data-bind="text: $data.name, attr:{href: $parentContext.$data.url + '/' + $data.projectKey}"></a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        <!-- /ko -->
+    </div>
+</div>
+<script type="text/javascript">
+    var _projects = <%- JSON.stringify(projects) %>;
+    var _user = <%- JSON.stringify(user) %>;
+
+    function viewModel(projects, user){
+        root = this;
+        root.projects = ko.observableArray();
+        
+        if (user.isAdmin || user.isSuper){
+            root.projects(projects);
+        } else {
+            projects.forEach(function (project){
+                user.roles.forEach(function (role){
+                    if (role === project.projectKey)
+                        root.projects.push(project);
+                });
+            });
+        }
+
+        root.repositories = ko.observableArray(
+            [{
+                name: "Scenarios",
+                icon: "fa-file-text",
+                url:  "scenariorepository"
+            },{
+                name: "Suites",
+                icon: "fa-th-large",
+                url:  "suiterepository"
+            },{
+                name: "Scripts",
+                icon: "fa-book",
+                url:  "scriptsrepository"
+            },{
+                name: "Objects",
+                icon: "fa-cubes",
+                url:  "pages"
+            }]
+        );
+    }
+
+    ko.applyBindings(new viewModel(_projects, _user), document.getElementById('pagecontent'));
+</script>

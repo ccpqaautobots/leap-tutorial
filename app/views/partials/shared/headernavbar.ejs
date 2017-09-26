@@ -1,0 +1,73 @@
+<nav class="navbar navbar-static-top">
+      <!-- Sidebar toggle button-->
+      <a href="#" class="sidebar-toggle" data-toggle="offcanvas" role="button">
+        <span class="sr-only">Toggle navigation</span>
+      </a>
+      <!-- Navbar Right Menu -->
+      <% if (user == null) { %>
+      <div class="navbar-custom-menu">
+        <ul class="nav navbar-nav">
+          <li class="dropdown tasks-menu">
+            <a id="trello-trigger" href="#" data-target="#trello-modal">
+              <i class="fa fa-bug"></i>
+            </a>
+          </li>
+          <li><a href="/login">Login</a></li>
+        </ul>
+      </div>
+      <% } else if (user != null) { %>
+      <div class="navbar-custom-menu">
+        <ul class="nav navbar-nav">
+          <!-- Tasks: style can be found in dropdown.less -->
+          <li class="dropdown tasks-menu">
+            <a href="#" id="trello-trigger" data-target="#trello-modal">
+              <i class="fa fa-bug"></i>
+            </a>
+          </li>
+          <!-- User Account: style can be found in dropdown.less -->
+          <li class="dropdown user user-menu">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+              <img src="dist/img/user3-128x128.jpg" class="user-image" alt="User Image">
+              <span class="hidden-xs"><%- user.fullname %></span>
+            </a>
+            <ul class="dropdown-menu">
+              <!-- User image -->
+              <li class="user-header">
+                <img src="dist/img/user3-128x128.jpg" class="img-circle" alt="User Image">
+
+                <p>
+                  <%- user.fullname %> - <%- user.jobTitle %>
+                  <small>Member since Nov. 2012</small>
+                </p>
+              </li>
+              <!-- Menu Body -->
+              <li class="user-body">
+                <div class="row">
+                  <div class="col-xs-3 text-center">
+                    <a href="/user/<%- user.username %>">Profile</a>
+                  </div>
+                  <div class="col-xs-3 text-center">
+                    <a href="/user/<%- user.username %>/settings">Settings</a>
+                  </div>
+                  <div class="col-xs-3 text-center">
+                    <a href="/unlock">Lock</a>
+                  </div>
+                  <div class="col-xs-3 text-center">
+                    <a href="/logout">Sign out</a>
+                  </div>
+                </div>
+                <!-- /.row -->
+              </li>
+              <!-- Menu Footer-->
+              <li class="user-footer">
+              </li>
+            </ul>
+          </li>
+          <!-- Control Sidebar Toggle Button -->
+          <li>
+            <a href="#" data-toggle="control-sidebar"><i class="fa fa-gears"></i></a>
+          </li>
+        </ul>
+      </div>
+      <% } %>
+    </nav>

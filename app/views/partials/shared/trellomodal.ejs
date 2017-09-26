@@ -1,0 +1,38 @@
+<div id="trello-modal" class="modal inmodal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog">
+		<div class="modal-content animated bounceInRight">
+			<div class="modal-header">
+				<button data-bind="click: $root.trelloClearModal" type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">×</span>
+				</button>
+				<i class="fa fa-trello modal-icon"></i>
+				<h4 class="modal-title">Found something?</h4>
+			</div>
+			<form id="trello-form" data-bind="trelloForm, trelloValidation, attr: {action: $root.trelloAction}" method="post" enctype="multipart/form-data">
+				<div class="modal-body">
+					<div class="form-group">
+						<label for="name" class="control-label">Bug name</label>
+						<input name="name" class="form-control" data-bind="value: $root.trelloCardName" />
+						<label for="description" class="control-label">Bug description</label>
+						<textarea name="description" class="form-control" data-bind="value: $root.trelloCardDescription"></textarea>
+						<label for="url" class="control-label">Bug url (origin)</label>
+						<input name="url" class="form-control" data-bind="value: $root.trelloCardUrl" />
+						<!--<label for="fileupload" class="control-label">Attachments (optional)</label>
+						<div name="fileupload" style="position:relative;">
+							<a class='btn btn-primary' href="#">
+								Upload file
+								<input id="trello-attachments" type="file" name="trello-files" multiple>
+							</a>
+							&nbsp;
+							<span class='label label-info' id="upload-file-info"></span>
+						</div>-->
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-default" data-dismiss="modal" data-bind="click: $root.trelloClearModal">Close</button>
+					<button type="submit" class="btnwizard btn btn-primary" data-bind="click: $root.triggerTrelloToken, html: $root.trelloSaveLoad"></button>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>

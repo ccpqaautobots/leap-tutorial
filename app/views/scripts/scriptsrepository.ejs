@@ -1,0 +1,212 @@
+<script>
+    function ScriptRepositoryViewModel() {
+        var root = this;
+
+        root.project = '<%= project.projectKey %>';
+        var _author = <%- JSON.stringify(user.fullname) %>;
+        root.statuses = ko.observableArray(["-", "In-progress", "Maintenance", "Completed"]);
+
+        // Toastr
+        function toastrTrigger(message, title, type) {
+            setTimeout(function () {
+                toastr.options = {
+                    closeButton: true,
+                    progressBar: true,
+                    showMethod: 'slideDown',
+                    timeOut: 4000
+                };
+                toastr[type || "success"](message, title || 'Script Repository');
+            }, 500);
+        }
+
+        // model for script
+        function Script(script) {
+            var _this = this;
+            _this._id = ko.observable((script) ? script._id : undefined);
+            _this.project = ko.observable((script) ? script.project : undefined);
+            _this.module = ko.observable((script) ? script.module : '');
+            _this.testName = ko.observable((script) ? script.testName : undefined);
+            _this.author = ko.observable((script) ? script.author : undefined);
+            _this.status = ko.observable((script.status) ? script.status : "-");
+
+            _this.edit = ko.computed(function () {
+                var path = `/scripteditor?project=${encodeURIComponent(root.project)}&testName=${encodeURIComponent(_this.testName())}&type=edit`;
+                if (encodeURIComponent(_this.module()) != 'undefined') {
+                    path += `&module=${encodeURIComponent(_this.module())}`;
+                }
+                return path;
+            });
+
+            _this.clone = ko.computed(function () {
+                var path = `/scripteditor?project=${encodeURIComponent(root.project)}&testName=${encodeURIComponent(_this.testName())}&type=clone`;
+                if (encodeURIComponent(_this.module()) != 'undefined') {
+                    path += `&module=${encodeURIComponent(_this.module())}`;
+                }
+                return path;
+            });
+
+            _this.delete = function () {
+                $.ajax({
+                    type: 'GET',
+                    url: `/api/dependentSuites/${_this._id()}`,
+                    success: function (result) {
+                        if (result instanceof Array) {
+                            root.dependentSuites(result);
+                            root.targetScript(_this._id());
+                            $('#delete-confirmation-modal').modal('show');
+                        }
+                    }
+                });
+            };
+
+            _this.update = function () {
+                $.ajax({
+                    type: 'POST',
+                    url: `/api/scripts/status`,
+                    data: JSON.stringify({ test: JSON.parse(ko.toJSON(_this)), updatedBy: _author }),
+                    contentType: 'application/json; charset=utf-8',
+                    dataType: 'json',
+                    success: function (result) {
+                        console.log(result);
+                        if (result.type === "success") {
+                            // if result returned successful
+                            toastrTrigger(result.message); // trigger snackbar
+                        } else {
+                            toastrTrigger(result.message, undefined, 'error');
+                        }
+                    }
+                });
+            };
+        }
+
+        root.scripts = ko.observableArray();
+        root.isLoadingScripts = ko.observable(true);
+        root.targetScript = ko.observable();
+        root.dependentSuites = ko.observableArray([]);
+
+        root.deleteScript = function (id) {
+            $.ajax({
+                type: 'DELETE',
+                url: `/api/scripts/${root.targetScript()}`,
+                success: function (result) {
+                    var oldMaxPage = root.maxPageIndex();
+                    root.scripts.remove(root.scripts().filter(_ => _._id() == root.targetScript())[0]);
+                    if (oldMaxPage == root.pageIndex()) {
+                        if (oldMaxPage != root.maxPageIndex()) {
+                            root.gotoPage(root.maxPageIndex());
+                        }
+                    }
+                    $('#delete-confirmation-modal').modal('hide');
+                }
+            });
+        };
+
+        $.ajax({
+            type: 'POST',
+            url: '/api/getScripts',
+            data: JSON.stringify({ query: { project: root.project }, options: { limit: 0 } }),
+            contentType: 'application/json; charset=utf-8',
+            dataType: 'json',
+            success: function (result) {
+                result.forEach(function (script) {
+                    root.scripts.push(new Script(script));
+                });
+                root.isLoadingScripts(false);
+            }
+        });
+
+        root.pageSizes = ko.observable([
+            { name: '10 per page', value: 10 },
+            { name: '25 per page', value: 25 },
+            { name: '50 per page', value: 50 },
+            { name: 'All', value: 0 }
+        ]);
+        root.pageSize = ko.observable(root.pageSizes()[0]);
+        root.pageIndex = ko.observable(0);
+        root.previousPage = function () {
+            if (root.pageIndex() > 0) {
+                root.pageIndex(root.pageIndex() - 1);
+            }
+        };
+        root.nextPage = function () {
+            if (root.pageIndex() >= 0 && root.pageIndex() < root.maxPageIndex()) {
+                root.pageIndex(root.pageIndex() + 1);
+            }
+        };
+        root.gotoPage = function (data) {
+            root.pageIndex(data);
+        };
+        root.maxPageIndex = ko.computed(function () {
+            if (root.pageSize().value == 0)
+                return 0;
+
+            return Math.ceil(root.scripts().length / root.pageSize().value - 1)
+        }, root);
+        root.pagedScripts = ko.computed(function () {
+            var size = (root.pageSize().value == 0) ? root.scripts().length : root.pageSize().value;
+            var start = root.pageIndex() * size;
+            return root.scripts.slice(start, start + size);
+        }, root);
+
+        root.searchScripts = function () {
+            root.submitFilterFormHTML('<i class="fa fa-spinner fa-pulse"></i>');
+            root.isLoadingScripts(true);
+            $.ajax({
+                type: 'POST',
+                url: '/api/getScripts',
+                data: JSON.stringify({ query: root.filterQuery(), options: { limit: 0 } }),
+                contentType: 'application/json; charset=utf-8',
+                dataType: 'json',
+                success: function (result) {
+                    root.scripts.removeAll();
+                    result.forEach(function (script) {
+                        root.scripts.push(new Script(script));
+                    });
+                    root.submitFilterFormHTML('Search');
+                    root.isLoadingScripts(false);
+                }
+            });
+        };
+
+        ko.bindingHandlers.filterForm = {
+            init: function (element, valueAccessor) {
+                root.resetFilterForm = function () {
+                    root.filterModule('');
+                    root.filterScriptname('');
+                    root.filterAuthor('');
+                    root.searchScripts();
+                };
+                root.submitFilterFormHTML = ko.observable('Search');
+                root.filterModule = ko.observable().extend({ trimmed: true });
+                root.filterScriptname = ko.observable().extend({ trimmed: true });
+                root.filterAuthor = ko.observable().extend({ trimmed: true });
+                root.filterOrCondition = ko.computed(function () {
+                    var or = [];
+                    if (root.filterModule())
+                        or.push({ module: { $regex: root.filterModule(), $options: 'i' } });
+                    if (root.filterScriptname())
+                        or.push({ testName: { $regex: root.filterScriptname(), $options: 'i' } });
+                    if (root.filterAuthor())
+                        or.push({ author: { $regex: root.filterAuthor(), $options: 'i' } });
+
+                    return (or.length > 0) ? or : undefined;
+                });
+                root.filterQuery = ko.computed(function () {
+                    var query = {
+                        project: root.project,
+                        $or: root.filterOrCondition()
+                    }
+                    return JSON.parse(JSON.stringify(query));
+                });
+                $(element).submit(function (e) {
+                    e.preventDefault();
+                    root.searchScripts();
+                });
+            }
+        };
+
+    }; // end of script repository view model
+
+    ko.applyBindings(new ScriptRepositoryViewModel(), document.getElementById('wrapper-content'));
+
+</script>

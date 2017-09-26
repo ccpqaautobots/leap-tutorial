@@ -1,0 +1,104 @@
+<li id="trello-trigger" data-target="#trello-modal">
+	<a href="#"><i class="fa fa-fw fa-trello"></i> <span class="nav-label">Bug </span></a>
+</li>
+<% if (user == null) { %>
+<li>
+	<a href="/login"><i class="fa fa-fw fa-user"></i> <span class="nav-label">Login </span></a>
+</li>
+<% } %>
+<li <% if (sidebarmenu.l1 === 'dashboard') { %>class="active" <% } %> >
+	<a href="index.html"><i class="fa fa-fw fa-dashboard"></i> <span class="nav-label">Dashboard </span><span class="fa fa-fw arrow"></span></a>
+	<ul class="nav nav-second-level collapse">
+		<li <% if (sidebarmenu.l2 === 'overview') { %>class="active" <% } %> ><a href="#">Overview</a></li>
+		<% if (user != null) { %>
+		<li <% if (sidebarmenu.l2 === 'reports') { %>class="active" <% } %> >
+			<a href="#" id="damian">Reports<span class="fa fa-fw arrow"></span></a>
+			<ul class="nav nav-third-level">
+				<% projects.forEach(function(project) { %>
+					<% if (user.isSuper || user.isAdmin || user.roles.includes(project.projectKey)) { %>
+						<li <% if (sidebarmenu.l3 === project.projectKey && sidebarmenu.l2 === 'reports') { %>class="active" <% } %> ><a href="/project/dashboard/<%= project.projectKey %>"><%= project.name %></a></li>
+					<% } %>
+				<% }); %>
+			</ul>
+		</li>
+		<li <% if (sidebarmenu.l2 === 'unittest') { %>class="active" <% } %> ><a href="#">Unit Tests</a></li>
+		<% } %>
+	</ul>
+</li>
+<% if (user != null) { %>
+<!--<li <% if (sidebarmenu.l1 === 'editor') { %>class="active" <% } %> >
+	<a href="#"><i class="fa fa-fw fa-edit"></i> <span class="nav-label">Editors </span><span class="fa fa-fw arrow"></span></a>
+	<ul class="nav nav-second-level collapse">
+		<li <% if (sidebarmenu.l2 === 'scripteditor') { %>class="active" <% } %> ><a href="/scripteditor">Test script editor</a></li>
+		<li <% if (sidebarmenu.l2 === 'suiteeditor') { %>class="active" <% } %> ><a href="#">Test suite editor</a></li>
+	</ul>
+</li>-->
+<li <% if (sidebarmenu.l1 === 'execution') { %>class="active" <% } %> >
+	<a href="/execution"><i class="fa fa-fw fa-play"></i> <span class="nav-label">Execution </span><span class="fa fa-fw arrow"></span></a>
+	<ul class="nav nav-second-level collapse">
+		<li <% if (sidebarmenu.l2 === 'runtest') { %>class="active" <% } %> >
+			<a href="/execution/runtest" id="damian">Run Test <span class="fa fa-fw arrow"></span></a>
+			<ul class="nav nav-third-level">
+				<li <% if (sidebarmenu.l3 === 'runondemand') { %>class="active" <% } %> ><a href="/execution/runtest/runondemand">Run Test on Demand</a></li>
+				<li <% if (sidebarmenu.l3 === 'runschedule') { %>class="active" <% } %> ><a href="/execution/runtest/scheduleruns">Schedule Test Run</a></li>
+			</ul>
+		</li>
+		<li <% if (sidebarmenu.l2 === 'testresults') { %>class="active" <% } %> ><a href="/execution/testresults">View Test Results</a></li>
+		<li <% if (sidebarmenu.l2 === 'gridsetup') { %>class="active" <% } %> ><a href="#">Selenium Grid Setup</a></li>
+	</ul>
+</li>
+<li <% if (sidebarmenu.l1 === 'repository' || sidebarmenu.l1 === 'repositories') { %>class="active" <% } %> >
+	<a href="#"><i class="fa fa-fw fa-database"></i> <span class="nav-label">Repositories </span><span class="fa fa-fw arrow"></span></a>
+	<ul class="nav nav-second-level collapse">
+		<li <% if (sidebarmenu.l2 === 'scenariosrepo') { %>class="active" <% } %> >
+			<a href="#" id="damian">Scenarios<span class="fa fa-fw arrow"></span></a>
+			<ul class="nav nav-third-level">
+				<% projects.forEach(function(project) { %>
+					<% if (user.isSuper || user.isAdmin || user.roles.includes(project.projectKey)) { %>
+						<li <% if (sidebarmenu.l3 === project.projectKey && sidebarmenu.l2 === 'scenariosrepo') { %>class="active" <% } %> ><a href="/scenariorepository/<%= project.projectKey %>"><%= project.name %></a></li>
+					<% } %>
+				<% }); %>
+			</ul>
+		</li>
+		<li <% if (sidebarmenu.l2 === 'suitesrepo') { %>class="active" <% } %> >
+			<a href="#" id="damian">Suites<span class="fa fa-fw arrow"></span></a>
+			<ul class="nav nav-third-level">
+				<% projects.forEach(function(project) { %>
+					<% if (user.isSuper || user.isAdmin || user.roles.includes(project.projectKey)) { %>
+						<li <% if (sidebarmenu.l3 === project.projectKey && sidebarmenu.l2 === 'suitesrepo') { %>class="active" <% } %> ><a href="/suiterepository/<%= project.projectKey %>"><%= project.name %></a></li>
+					<% } %>
+				<% }); %>
+			</ul>
+		</li>
+		<li <% if (sidebarmenu.l2 === 'scriptsrepo') { %>class="active" <% } %> >
+			<a href="#" id="damian">Scripts<span class="fa fa-fw arrow"></span></a>
+			<ul class="nav nav-third-level">
+				<% projects.forEach(function(project) { %>
+					<% if (user.isSuper || user.isAdmin || user.roles.includes(project.projectKey)) { %>
+						<li <% if (sidebarmenu.l3 === project.projectKey && sidebarmenu.l2 === 'scriptsrepo') { %>class="active" <% } %> ><a href="/scriptsrepository/<%= project.projectKey %>"><%= project.name %></a></li>
+					<% } %>
+				<% }); %>
+			</ul>
+		</li>
+		<li <% if (sidebarmenu.l2 === 'objectsrepo') { %>class="active" <% } %> >
+			<a href="#" id="damian">Objects<span class="fa fa-fw arrow"></span></a>
+			<ul class="nav nav-third-level">
+				<% projects.forEach(function(project) { %>
+					<% if (user.isSuper || user.isAdmin || user.roles.includes(project.projectKey)) { %>
+						<li <% if (sidebarmenu.l3 === project.projectKey && sidebarmenu.l2 === 'objectsrepo') { %>class="active" <% } %> ><a href="/pages/<%= project.projectKey %>"><%= project.name %></a></li>
+					<% } %>
+				<% }); %>
+			</ul>
+		</li>
+	</ul>
+</li>
+<% if (user.isSuper || user.isAdmin) { %>
+	<li <% if (sidebarmenu.l1 === 'administrator') { %>class="active" <% } %> >
+		<a href="#"><i class="fa fa-fw fa-key"></i> <span class="nav-label">Admin</span><span class="fa fa-fw arrow"></span></a>
+		<ul class="nav nav-second-level collapse">
+			<li <% if (sidebarmenu.l2 === 'projectmanagement') { %>class="active" <% } %> ><a href="/administrator/projects">Projects</a></li>
+			<li <% if (sidebarmenu.l2 === 'usermanagement') { %>class="active" <% } %> ><a href="/administrator/users">Users</a></li>
+		</ul>
+	</li>
+<% } %>
+<% } %>

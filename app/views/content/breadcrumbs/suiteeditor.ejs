@@ -1,0 +1,50 @@
+<div class="row wrapper border-bottom white-bg page-heading" id="breadcrumb">
+    <div class="col-lg-10">
+        <h2>Suite Editor</h2>
+        <ol class="breadcrumb">
+            <li>
+                <a href="/">Home</a>
+            </li>
+            <li>
+                <a href="/repositories">Repositories</a>
+            </li>
+            <li>
+                <a data-bind="attr: {href: '/suiterepository/' + $root.project()}, text: $root.projectName() + ' Test Suites'"></a>
+            </li>
+            <li class="active">
+                <strong data-bind="text: $root.action()"></strong>
+            </li>
+        </ol>
+    </div>
+    <div class="col-lg-2"></div>
+</div>
+<script type="text/javascript">
+    var _projects = <%- JSON.stringify(projects) %>;
+    var _query = <%- JSON.stringify(query) %>;
+
+    function viewModel(projects, query){
+        var root = this;
+        root.projects = ko.observableArray(projects);
+        root.projectName = ko.observable();
+        root.project = ko.observable(query.project);
+        root.hasQuery = ko.observable();
+        root.action = ko.observable('Create Suite');
+
+        (query.project) ? root.hasQuery(true) : root.hasQuery(false); 
+        
+        root.projects().forEach(function(proj){
+                if (query.project == proj.projectKey)
+                    return root.projectName(proj.name);
+        });
+
+        if (root.hasQuery()){
+            if (_query.type == 'edit')
+                root.action('Edit Suite - ' + _query.suitename);
+            if (_query.type == 'clone')
+                root.action('Clone Suite - ' + _query.suitename);
+        }
+    }
+
+    ko.applyBindings(new viewModel(_projects, _query), document.getElementById("breadcrumb"));
+
+</script>
