@@ -4,7 +4,7 @@
 // dependencies
 // ================================================================
 
-// express
+// express test
 var express = require('express');
 var bodyParser = require('body-parser');
 var cookieParser = require('cookie-parser');
@@ -112,48 +112,48 @@ app.use(require('./router'));
 // ================================================================
 // process exception handling
 // ================================================================
-process.on('uncaughtException', 
+process.on('uncaughtException',
     require('./helpers/uncaughtexceptionhandler')({
         consoleLog: true,
         emailNotification: true
-}));
+    }));
 
 // ================================================================
 // process events
 // ================================================================
 var sockets = {},
     nextSocketId = 0;
-server.on('connection', function (socket) {
+server.on('connection', function(socket) {
     var socketId = nextSocketId++;
     sockets[socketId] = socket;
 
-    socket.on('close', function () {
+    socket.on('close', function() {
         delete sockets[socketId];
     });
 });
 
 function Shutdown() {
-    Object.keys(sockets).forEach(function (socket) {
+    Object.keys(sockets).forEach(function(socket) {
         if (socket)
             sockets[socket].destroy();
     });
 
-    server.close(function () {
+    server.close(function() {
         process.exit();
     });
 }
 
 // listen for TERM signal .e.g. kill 
-process.on('SIGTERM', function () {
+process.on('SIGTERM', function() {
     Shutdown();
 });
 
 // listen for INT signal e.g. Ctrl-C
-process.on('SIGINT', function () {
+process.on('SIGINT', function() {
     Shutdown();
 });
 
-process.openStdin().addListener('data', function (data) {
+process.openStdin().addListener('data', function(data) {
     if (data.toString().trim() === '--shutdown') {
         Shutdown();
     }
@@ -162,7 +162,7 @@ process.openStdin().addListener('data', function (data) {
 io.use(ios(session));
 
 var pubChat = io.of('/public-chat').use(ios(session));
-pubChat.on('connection', function (socket) {
+pubChat.on('connection', function(socket) {
     var userSession = socket.handshake.session || undefined;
     if (userSession.user) {
         var user = {
@@ -173,19 +173,19 @@ pubChat.on('connection', function (socket) {
 
     pubChat.emit('user connected', { user: user });
 
-    socket.on('typing', function (userTyping) {
+    socket.on('typing', function(userTyping) {
         socket.broadcast.emit('status typing', userTyping);
     });
 
-    socket.on('not typing', function (userTyping) {
+    socket.on('not typing', function(userTyping) {
         socket.broadcast.emit('status not typing', userTyping);
     });
 
-    socket.on('send message', function (data) {
+    socket.on('send message', function(data) {
         socket.broadcast.emit('receive message', data);
     });
 
-    socket.on('disconnect', function () {
+    socket.on('disconnect', function() {
 
     });
 });
@@ -197,12 +197,12 @@ pubChat.on('connection', function (socket) {
 // initalize projects
 var models = require('./models');
 var Project = models.Project;
+
 function LoadProjects(callback) {
-    return Project.find({
-    }).select({
+    return Project.find({}).select({
         _id: 0,
         environments: 0
-    }).exec(function (err, projects) {
+    }).exec(function(err, projects) {
         if (err)
             callback(err);
 
@@ -210,14 +210,14 @@ function LoadProjects(callback) {
     })
 }
 
-mongoose.connect(require('./config/mongodb')(), { useMongoClient: true }, function (mongoError) {
+mongoose.connect(require('./config/mongodb')(), { useMongoClient: true }, function(mongoError) {
     if (mongoError)
         throw new Error('[ERROR] Unable to start server, failed to connect to mongo database.\n' + mongoError);
     else {
         var port = process.env.PORT || '8080';
-        LoadProjects(function (error, projects) {
+        LoadProjects(function(error, projects) {
             app.locals.projects = projects;
-            server.listen(port, function () {
+            server.listen(port, function() {
                 console.log('[SERVER] Started is now running at ' + port + ' ...');
             });
         });
